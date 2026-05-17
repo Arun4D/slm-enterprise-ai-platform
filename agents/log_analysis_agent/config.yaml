@@ -1,0 +1,40 @@
+# Log Analysis Agent Configuration
+name: log_analysis_agent
+version: 1.0.0
+
+# Parser settings
+parsers:
+  log:
+    extensions: [".log", ".txt"]
+    max_file_size_mb: 100
+  structured:
+    extensions: [".json", ".jsonl"]
+    max_file_size_mb: 50
+  windows:
+    extensions: [".evtx"]
+    max_file_size_mb: 100
+
+# Analysis settings
+analysis:
+  max_patterns_returned: 10
+  error_keywords:
+    - "error"
+    - "exception"
+    - "failed"
+    - "critical"
+    - "fatal"
+    - "severe"
+  warning_keywords:
+    - "warning"
+    - "warn"
+    - "deprecated"
+  info_keywords:
+    - "info"
+    - "started"
+    - "completed"
+
+# Output settings
+output:
+  include_samples: true
+  sample_count: 3
+  max_summary_length: 500

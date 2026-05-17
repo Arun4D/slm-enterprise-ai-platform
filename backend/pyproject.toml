@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slm-enterprise-ai-platform"
+version = "0.1.0"
+description = "Enterprise AI Operations Platform with Small Language Models"
+requires-python = ">=3.10"
+authors = [
+    {name = "AI Platform Team", email = "platform@internal.com"}
+]
+
+dependencies = [
+    "fastapi==0.109.0",
+    "uvicorn[standard]==0.27.0",
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+    "python-dotenv==1.0.0",
+    "llama-cpp-python==0.2.50",
+    "structlog==24.1.0",
+    "pytest==7.4.3",
+    "pytest-asyncio==0.23.2",
+    "pytest-cov==4.1.0",
+    "aiofiles==23.2.1",
+    "typing-extensions==4.9.0",
+    "tenacity==8.2.3",
+    "python-multipart==0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black==24.1.1",
+    "ruff==0.2.1",
+    "mypy==1.8.0",
+    "pre-commit==3.6.0",
+    "pytest-mock==3.13.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "tests*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=html --cov-report=term-missing"

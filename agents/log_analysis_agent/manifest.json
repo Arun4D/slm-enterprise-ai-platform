@@ -1,0 +1,21 @@
+{
+  "name": "log_analysis_agent",
+  "version": "1.0.0",
+  "description": "Analyzes logs for errors, anomalies, and root cause patterns",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "LogAnalysisAgent",
+  "capabilities": [
+    "parse_logs",
+    "detect_errors",
+    "analyze_patterns",
+    "suggest_remediation",
+    "severity_classification"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read",
+    "fs:scan"
+  ],
+  "min_llm_version": "7b"
+}
