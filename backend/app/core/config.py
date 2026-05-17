@@ -6,9 +6,13 @@ Follows 12-factor app principles for enterprise deployments.
 """
 
 import logging
+from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+ROOT_PATH = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -23,7 +27,7 @@ class Settings(BaseSettings):
     debug: bool = False
     app_name: str = "SLM Enterprise AI Platform"
     app_version: str = "0.1.0"
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000", "http://localhost:4173"]
 
     # SLM Model Configuration
     slm_model_path: str = "/models/phi-3-mini-gguf/model.gguf"
@@ -42,16 +46,34 @@ class Settings(BaseSettings):
 
     # Plugin System
     plugin_auto_discovery: bool = True
-    plugin_allowed_paths: list[str] = ["/agents", "/plugins"]
+    plugin_allowed_paths: list[str] = [str(ROOT_PATH / "agents"), str(ROOT_PATH / "plugins")]
     plugin_trusted_sources: str = "internal"
+    runtime_workspace_path: str = "/tmp/slm-enterprise-ai-platform"
+    file_allowed_paths: list[str] = [
+        str(ROOT_PATH / "agents"),
+        str(ROOT_PATH / "plugins"),
+        "/tmp/slm-enterprise-ai-platform",
+    ]
 
     # Audit
     audit_logging_enabled: bool = True
-    audit_log_path: str = "/logs/audit"
+    audit_log_path: str = "logs/audit"
 
     # Agent Constraints
     agent_execution_timeout_seconds: int = 300
     agent_memory_limit_mb: int = 512
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value: object) -> object:
+        """Accept common environment labels that appear in DEBUG variables."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production", "off"}:
+                return False
+            if normalized in {"dev", "development", "on"}:
+                return True
+        return value
 
     class Config:
         env_file = ".env"

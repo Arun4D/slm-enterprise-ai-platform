@@ -28,7 +28,7 @@ class PathValidator:
         Args:
             allowed_paths: List of allowed directory paths
         """
-        self.allowed_paths = [Path(p).resolve() for p in (allowed_paths or settings.plugin_allowed_paths)]
+        self.allowed_paths = [Path(p).resolve() for p in (allowed_paths or settings.file_allowed_paths)]
 
     def is_safe_path(self, path: str) -> bool:
         """

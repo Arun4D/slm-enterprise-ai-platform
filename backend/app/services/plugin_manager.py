@@ -200,7 +200,6 @@ class PluginManager:
             manifest.entry_point,
             "config.yaml",
             "prompts.py",
-            "tools.py",
         ]
 
         for file in required_files:
@@ -209,6 +208,12 @@ class PluginManager:
                     f"Missing required file: {file}",
                     plugin_name=manifest.name,
                 )
+
+        if not (plugin_path / "tools.py").exists() and not (plugin_path / "tools").is_dir():
+            raise PluginException(
+                "Missing required tools module: tools.py or tools/",
+                plugin_name=manifest.name,
+            )
 
     async def _load_plugin_module(self, plugin_path: Path, manifest: PluginManifest) -> IAgent:
         """Dynamically load plugin module and instantiate agent."""
@@ -227,7 +232,18 @@ class PluginManager:
 
             module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+
+            plugin_path_str = str(plugin_path)
+            path_added = False
+            if plugin_path_str not in sys.path:
+                sys.path.insert(0, plugin_path_str)
+                path_added = True
+
+            try:
+                spec.loader.exec_module(module)
+            finally:
+                if path_added:
+                    sys.path.remove(plugin_path_str)
 
             # Get agent class and instantiate
             agent_class = getattr(module, manifest.agent_class)

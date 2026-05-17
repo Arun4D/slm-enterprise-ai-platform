@@ -32,6 +32,7 @@ class LogParser:
             entry = {
                 "timestamp": None,
                 "level": "INFO",
+                "level_detected": False,
                 "message": line,
                 "raw": line,
             }
@@ -45,6 +46,7 @@ class LogParser:
             level_match = re.search(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", line, re.I)
             if level_match:
                 entry["level"] = level_match.group(1).upper()
+                entry["level_detected"] = True
 
             entries.append(entry)
 
@@ -87,8 +89,12 @@ class LogParser:
 class LogAnalyzer:
     """Analyze parsed log entries for patterns and issues."""
 
+    CLASSIFIER_VERSION = "explicit-level-first-v2"
     ERROR_KEYWORDS = ["error", "exception", "failed", "critical", "fatal", "severe"]
     WARNING_KEYWORDS = ["warning", "warn", "deprecated"]
+    ERROR_LEVELS = {"ERROR", "CRITICAL", "FATAL", "SEVERE"}
+    WARNING_LEVELS = {"WARNING", "WARN"}
+    NON_PROBLEM_LEVELS = {"TRACE", "DEBUG", "INFO"}
 
     @classmethod
     def classify_entries(cls, entries: list[dict[str, Any]]) -> dict[str, list[dict]]:
@@ -102,17 +108,69 @@ class LogAnalyzer:
         for entry in entries:
             message = entry.get("message", "").lower()
             level = entry.get("level", "INFO").upper()
+            level_detected = entry.get("level_detected", "level" in entry)
 
-            if level == "ERROR" or level == "CRITICAL" or any(
-                kw in message for kw in cls.ERROR_KEYWORDS
-            ):
+            if level in cls.ERROR_LEVELS:
                 classified["errors"].append(entry)
-            elif level == "WARNING" or any(kw in message for kw in cls.WARNING_KEYWORDS):
+            elif level in cls.WARNING_LEVELS:
+                classified["warnings"].append(entry)
+            elif level_detected and level in cls.NON_PROBLEM_LEVELS:
+                classified["info"].append(entry)
+            elif any(kw in message for kw in cls.ERROR_KEYWORDS):
+                classified["errors"].append(entry)
+            elif any(kw in message for kw in cls.WARNING_KEYWORDS):
                 classified["warnings"].append(entry)
             else:
                 classified["info"].append(entry)
 
         return classified
+
+    @classmethod
+    def detect_application_lifecycle(cls, entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """Detect common application startup signals from parsed logs."""
+        status: dict[str, Any] = {
+            "application_started": False,
+            "application_name": None,
+            "pid": None,
+            "port": None,
+            "startup_seconds": None,
+            "jvm_running_seconds": None,
+            "evidence": [],
+        }
+
+        for entry in entries:
+            message = entry.get("message", "")
+
+            starting_match = re.search(
+                r"\bStarting\s+(?P<app>[\w.$-]+)\b.*?\bwith PID\s+(?P<pid>\d+)",
+                message,
+            )
+            if starting_match:
+                status["application_name"] = starting_match.group("app")
+                status["pid"] = int(starting_match.group("pid"))
+                status["evidence"].append(message[:300])
+
+            port_match = re.search(
+                r"\bTomcat (?:initialized with|started on) port(?:\(s\))?:?\s+(?P<port>\d+)",
+                message,
+            )
+            if port_match:
+                status["port"] = int(port_match.group("port"))
+
+            started_match = re.search(
+                r"\bStarted\s+(?P<app>[\w.$-]+)\s+in\s+(?P<startup>[\d.]+)\s+seconds"
+                r"(?:\s+\(JVM running for\s+(?P<jvm>[\d.]+)\))?",
+                message,
+            )
+            if started_match:
+                status["application_started"] = True
+                status["application_name"] = started_match.group("app")
+                status["startup_seconds"] = float(started_match.group("startup"))
+                if started_match.group("jvm"):
+                    status["jvm_running_seconds"] = float(started_match.group("jvm"))
+                status["evidence"].append(message[:300])
+
+        return status
 
     @classmethod
     def extract_patterns(cls, entries: list[dict[str, Any]], limit: int = 10) -> list[dict]:
@@ -132,7 +190,7 @@ class LogAnalyzer:
                     "count": 0,
                     "samples": [],
                     "level": entry.get("level", "INFO"),
-                },
+                }
 
             patterns[generalized]["count"] += 1
             if len(patterns[generalized]["samples"]) < 3:

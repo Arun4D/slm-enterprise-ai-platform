@@ -63,6 +63,64 @@ def test_log_analyzer_classification(sample_log_content):
     assert len(classified["errors"]) > 0
 
 
+def test_spring_boot_error_mapping_is_info():
+    """Spring Boot /error route mappings are INFO startup logs, not failures."""
+    content = """2017-08-08 17:12:32.420  INFO 19866 --- [           main] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped "{[/error]}" onto public org.springframework.http.ResponseEntity<java.util.Map<java.lang.String, java.lang.Object>> org.springframework.boot.autoconfigure.web.servlet.error.BasicErrorController.error(jakarta.servlet.http.HttpServletRequest)
+2017-08-08 17:12:32.421  INFO 19866 --- [           main] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped "{[/error],produces=[text/html]}" onto public org.springframework.web.servlet.ModelAndView org.springframework.boot.autoconfigure.web.servlet.error.BasicErrorController.errorHtml(jakarta.servlet.http.HttpServletRequest,jakarta.servlet.http.HttpServletResponse)
+"""
+    entries = LogParser.parse_text_log(content)
+    classified = LogAnalyzer.classify_entries(entries)
+
+    assert len(classified["errors"]) == 0
+    assert len(classified["warnings"]) == 0
+    assert len(classified["info"]) == 2
+
+
+def test_unstructured_error_text_is_still_error():
+    """Lines without explicit level should still use error keywords."""
+    entries = LogParser.parse_text_log("Unhandled exception while connecting to database")
+    classified = LogAnalyzer.classify_entries(entries)
+
+    assert len(classified["errors"]) == 1
+
+
+def test_spring_boot_application_started_detection():
+    """Detect Spring Boot startup completion without treating /error mapping as failure."""
+    content = """2017-08-08 17:12:30.910  INFO 19866 --- [           main] s.f.SampleWebFreeMarkerApplication       : Starting SampleWebFreeMarkerApplication with PID 19866
+2017-08-08 17:12:31.878  INFO 19866 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2017-08-08 17:12:32.420  INFO 19866 --- [           main] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped "{[/error]}" onto public org.springframework.boot.autoconfigure.web.servlet.error.BasicErrorController.error(jakarta.servlet.http.HttpServletRequest)
+2017-08-08 17:12:32.744  INFO 19866 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http)
+2017-08-08 17:12:32.750  INFO 19866 --- [           main] s.f.SampleWebFreeMarkerApplication       : Started SampleWebFreeMarkerApplication in 2.172 seconds (JVM running for 2.479)
+"""
+    entries = LogParser.parse_text_log(content)
+    classified = LogAnalyzer.classify_entries(entries)
+    status = LogAnalyzer.detect_application_lifecycle(entries)
+
+    assert len(classified["errors"]) == 0
+    assert status["application_started"] is True
+    assert status["application_name"] == "SampleWebFreeMarkerApplication"
+    assert status["pid"] == 19866
+    assert status["port"] == 8080
+    assert status["startup_seconds"] == 2.172
+
+
+def test_spring_boot_modern_startup_detection():
+    """Detect Spring Boot 3 style startup and port(s) messages."""
+    content = """2026-05-17 19:05:01.123  INFO 28432 --- [main] c.e.demo.DemoApplication                : Starting DemoApplication using Java 17.0.10 on My-Laptop with PID 28432
+2026-05-17 19:05:02.542  INFO 28432 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2026-05-17 19:05:03.211  INFO 28432 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 9080 (http) with context path ''
+2026-05-17 19:05:03.225  INFO 28432 --- [main] c.e.demo.DemoApplication                : Started DemoApplication in 2.654 seconds (JVM running for 3.12)
+"""
+    entries = LogParser.parse_text_log(content)
+    status = LogAnalyzer.detect_application_lifecycle(entries)
+
+    assert status["application_started"] is True
+    assert status["application_name"] == "DemoApplication"
+    assert status["pid"] == 28432
+    assert status["port"] == 9080
+    assert status["startup_seconds"] == 2.654
+
+
 def test_log_analyzer_pattern_extraction(sample_log_content):
     """Test pattern extraction."""
     entries = LogParser.parse_text_log(sample_log_content)

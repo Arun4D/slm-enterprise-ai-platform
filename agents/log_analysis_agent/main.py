@@ -6,6 +6,7 @@ Analyzes logs for errors, patterns, and provides remediation suggestions.
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -47,11 +48,30 @@ class LogAnalysisAgent(IAgent):
             "analyze log",
             "scan log",
             "log analysis",
+            "check error",
+            "find error",
+            "any error",
             "error analysis",
+            "error",
+            "errors",
+            "exception",
+            "failure",
+            "failed",
             "pattern detection",
             "debug",
+            "troubleshoot",
+            "application started",
+            "app started",
+            "started",
+            "startup",
+            "application status",
+            "application name",
+            "app name",
+            "what is the application name",
+            "which application",
         ]
-        return any(kw in intent.lower() for kw in log_keywords)
+        normalized_intent = re.sub(r"\s+", " ", intent.lower()).strip()
+        return any(kw in normalized_intent for kw in log_keywords)
 
     async def plan(self, intent: str, context: dict) -> dict:
         """
@@ -98,10 +118,26 @@ class LogAnalysisAgent(IAgent):
             Analysis results
         """
         results = {
+            "intent": plan.get("intent", ""),
             "files_analyzed": 0,
             "total_entries": 0,
-            "classified_entries": {},
+            "classified_entries": {
+                "errors": [],
+                "warnings": [],
+                "info": [],
+            },
             "patterns": [],
+            "application_status": {
+                "application_started": False,
+                "application_name": None,
+                "pid": None,
+                "port": None,
+                "startup_seconds": None,
+                "jvm_running_seconds": None,
+                "evidence": [],
+            },
+            "classifier_version": LogAnalyzer.CLASSIFIER_VERSION,
+            "query_answer": None,
             "summary": "",
             "errors": [],
         }
@@ -118,21 +154,20 @@ class LogAnalysisAgent(IAgent):
                     results["files_analyzed"] += 1
                     results["total_entries"] += file_result["entry_count"]
 
-                    # Aggregate results
-                    if "classified_entries" not in results:
-                        results["classified_entries"] = {
-                            "errors": [],
-                            "warnings": [],
-                            "info": [],
-                        }
-
                     results["classified_entries"]["errors"].extend(
                         file_result["classified"]["errors"]
                     )
                     results["classified_entries"]["warnings"].extend(
                         file_result["classified"]["warnings"]
                     )
+                    results["classified_entries"]["info"].extend(
+                        file_result["classified"]["info"]
+                    )
                     results["patterns"].extend(file_result["patterns"])
+                    self._merge_application_status(
+                        results["application_status"],
+                        file_result["application_status"],
+                    )
 
                 except Exception as e:
                     logger.error(f"Error analyzing file {log_file}: {e}")
@@ -142,6 +177,10 @@ class LogAnalysisAgent(IAgent):
 
             # Deduplicate patterns
             results["patterns"] = self._deduplicate_patterns(results["patterns"])
+            results["query_answer"] = self._build_query_answer(
+                results["intent"],
+                results["application_status"],
+            )
 
             return results
 
@@ -162,6 +201,9 @@ class LogAnalysisAgent(IAgent):
         """
         summary = "## Log Analysis Results\n\n"
 
+        if result.get("query_answer"):
+            summary += f"### Answer\n{result['query_answer']}\n\n"
+
         summary += f"### Overview\n"
         summary += f"- Files analyzed: {result.get('files_analyzed', 0)}\n"
         summary += f"- Total log entries: {result.get('total_entries', 0)}\n"
@@ -169,6 +211,24 @@ class LogAnalysisAgent(IAgent):
         classified = result.get("classified_entries", {})
         summary += f"- Errors found: {len(classified.get('errors', []))}\n"
         summary += f"- Warnings found: {len(classified.get('warnings', []))}\n\n"
+        summary += f"- Classifier: {result.get('classifier_version', 'unknown')}\n\n"
+
+        app_status = result.get("application_status", {})
+        if app_status:
+            summary += "### Application Status\n"
+            if app_status.get("application_started"):
+                app_name = app_status.get("application_name") or "Application"
+                summary += f"- {app_name} started successfully"
+                if app_status.get("startup_seconds") is not None:
+                    summary += f" in {app_status['startup_seconds']} seconds"
+                summary += "\n"
+                if app_status.get("port") is not None:
+                    summary += f"- Listening port detected: {app_status['port']}\n"
+                if app_status.get("pid") is not None:
+                    summary += f"- Process ID detected: {app_status['pid']}\n"
+            else:
+                summary += "- No application startup completion line was detected\n"
+            summary += "\n"
 
         patterns = result.get("patterns", [])
         if patterns:
@@ -229,13 +289,88 @@ class LogAnalysisAgent(IAgent):
         # Extract patterns
         error_entries = classified["errors"] + classified["warnings"]
         patterns = LogAnalyzer.extract_patterns(error_entries)
+        application_status = LogAnalyzer.detect_application_lifecycle(entries)
 
         return {
             "file": str(file_path),
             "entry_count": len(entries),
             "classified": classified,
             "patterns": patterns,
+            "application_status": application_status,
         }
+
+    @staticmethod
+    def _merge_application_status(target: dict, source: dict) -> None:
+        """Merge per-file startup signals into the aggregate result."""
+        if source.get("application_started"):
+            target["application_started"] = True
+
+        for key in [
+            "application_name",
+            "pid",
+            "port",
+            "startup_seconds",
+            "jvm_running_seconds",
+        ]:
+            if source.get(key) is not None:
+                target[key] = source[key]
+
+        target["evidence"].extend(source.get("evidence", []))
+        target["evidence"] = target["evidence"][:5]
+
+    @staticmethod
+    def _build_query_answer(intent: str, application_status: dict) -> str | None:
+        """Build a direct answer for common operator questions."""
+        normalized_intent = re.sub(r"\s+", " ", intent.lower()).strip()
+        asks_port = "port" in normalized_intent
+        asks_app_name = any(
+            phrase in normalized_intent
+            for phrase in [
+                "application name",
+                "app name",
+                "what is the application",
+                "which application",
+                "service name",
+            ]
+        )
+        asks_started = any(
+            phrase in normalized_intent
+            for phrase in [
+                "application started",
+                "app started",
+                "is running",
+                "application running",
+                "running in",
+                "startup",
+            ]
+        )
+
+        if asks_app_name:
+            app_name = application_status.get("application_name")
+            if app_name:
+                return f"The application name is {app_name}."
+            return "I could not find the application name in the analyzed logs."
+
+        if asks_port:
+            port = application_status.get("port")
+            app_name = application_status.get("application_name") or "Application"
+            if port is not None:
+                started = " and started successfully" if application_status.get("application_started") else ""
+                return f"{app_name} is running on port {port}{started}."
+            return "I could not find a listening port in the analyzed logs."
+
+        if asks_started:
+            app_name = application_status.get("application_name") or "Application"
+            if application_status.get("application_started"):
+                answer = f"{app_name} started successfully"
+                if application_status.get("startup_seconds") is not None:
+                    answer += f" in {application_status['startup_seconds']} seconds"
+                if application_status.get("port") is not None:
+                    answer += f" and is listening on port {application_status['port']}"
+                return f"{answer}."
+            return "I could not find an application startup completion line in the analyzed logs."
+
+        return None
 
     @staticmethod
     def _deduplicate_patterns(patterns: list[dict]) -> list[dict]:
