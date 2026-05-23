@@ -150,3 +150,65 @@ def test_log_summarizer(sample_log_content):
     
     assert "Overview" in summary
     assert "Error" in summary or "error" in summary.lower()
+
+
+def test_log_parser_datetime_parsing():
+    """Test parse_datetime utility."""
+    parsed_1 = LogParser.parse_datetime("2026-05-17 19:05:01.123")
+    assert parsed_1 is not None
+    assert parsed_1.year == 2026
+    assert parsed_1.month == 5
+    assert parsed_1.day == 17
+    assert parsed_1.hour == 19
+    assert parsed_1.minute == 5
+    assert parsed_1.second == 1
+
+    parsed_2 = LogParser.parse_datetime("[2026-05-17T19:05:01Z]")
+    assert parsed_2 is not None
+    assert parsed_2.second == 1
+
+
+def test_log_parser_datetime_filtering():
+    """Test filter_entries_by_datetime utility."""
+    entries = [
+        {"timestamp": "2026-05-17 19:05:00", "message": "Log 1", "level": "INFO"},
+        {"timestamp": "2026-05-17 19:06:00", "message": "Log 2", "level": "WARN"},
+        {"timestamp": "2026-05-17 19:07:00", "message": "Log 3", "level": "ERROR"},
+    ]
+    
+    # Range check
+    filtered_1 = LogParser.filter_entries_by_datetime(entries, "2026-05-17 19:05:30", "2026-05-17 19:06:30")
+    assert len(filtered_1) == 1
+    assert filtered_1[0]["message"] == "Log 2"
+
+    # Start-only check
+    filtered_2 = LogParser.filter_entries_by_datetime(entries, "2026-05-17 19:06:00", None)
+    assert len(filtered_2) == 2
+    assert filtered_2[0]["message"] == "Log 2"
+    assert filtered_2[1]["message"] == "Log 3"
+
+
+def test_log_analyzer_warning_remediation():
+    """Test SRE warning suggestions are returned successfully."""
+    deprecated_suggestion = LogAnalyzer.suggest_remediation("Warning: basic-auth is deprecated.")
+    assert "deprecation" in deprecated_suggestion.lower()
+
+    retry_suggestion = LogAnalyzer.suggest_remediation("WARN --- Couchbase connection lost, retrying...")
+    assert "transient" in retry_suggestion.lower() or "downstream" in retry_suggestion.lower()
+
+
+def test_agent_query_datetime_extraction():
+    """Test natural language datetime boundary extraction in LogAnalysisAgent."""
+    from main import LogAnalysisAgent
+    
+    # 1. Test "before YYYY-MM-DD HH:MM"
+    start, end = LogAnalysisAgent._extract_datetime_range("check warning logs before 2026-05-17 16:05")
+    assert start is None
+    assert end == "2026-05-17 16:05:59"
+
+    # 2. Test "after YYYY-MM-DD HH:MM:SS"
+    start, end = LogAnalysisAgent._extract_datetime_range("find errors after 2026-05-17 19:05:00")
+    assert start == "2026-05-17 19:05:00"
+    assert end is None
+
+

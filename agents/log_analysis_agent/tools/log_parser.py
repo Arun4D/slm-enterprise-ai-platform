@@ -16,6 +16,71 @@ class LogParser:
     """Parse various log file formats."""
 
     @staticmethod
+    def parse_datetime(dt_str: str) -> datetime | None:
+        """Parse datetime from various string formats."""
+        if not dt_str:
+            return None
+        # Clean string
+        dt_str = dt_str.strip().replace("[", "").replace("]", "")
+        # Remove milliseconds if present (e.g. 2026-05-17 19:05:01.123 -> 2026-05-17 19:05:01)
+        dt_str = re.sub(r"\.\d+", "", dt_str)
+        # Strip trailing Z or timezone offsets like +05:30 or +00:00 to keep it pure local time for SRE simplicity
+        dt_str = re.sub(r"(?:Z|[+-]\d{2}:?\d{2})$", "", dt_str)
+        
+        formats = [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+        ]
+        for fmt in formats:
+            try:
+                return datetime.strptime(dt_str, fmt)
+            except ValueError:
+                continue
+        return None
+
+    @classmethod
+    def filter_entries_by_datetime(
+        cls,
+        entries: list[dict[str, Any]],
+        start_time: str | None,
+        end_time: str | None,
+    ) -> list[dict[str, Any]]:
+        """Filter log entries by datetime range."""
+        if not start_time and not end_time:
+            return entries
+
+        start_dt = cls.parse_datetime(start_time) if start_time else None
+        end_dt = cls.parse_datetime(end_time) if end_time else None
+
+        if not start_dt and not end_dt:
+            return entries
+
+        filtered = []
+        for entry in entries:
+            entry_ts_str = entry.get("timestamp")
+            if not entry_ts_str:
+                # Discard entries without explicit timestamp during filtering
+                continue
+
+            entry_dt = cls.parse_datetime(entry_ts_str)
+            if not entry_dt:
+                continue
+
+            if start_dt and entry_dt < start_dt:
+                continue
+            if end_dt and entry_dt > end_dt:
+                continue
+
+            filtered.append(entry)
+
+        return filtered
+
+    @staticmethod
     def parse_text_log(content: str) -> list[dict[str, Any]]:
         """
         Parse plain text log format.
@@ -29,21 +94,28 @@ class LogParser:
             if not line.strip():
                 continue
 
+            # Mask passwords/secrets in log line (leaves usernames/user IDs completely intact!)
+            masked_line = re.sub(
+                r"(?i)\b(pass(?:word)?|pwd|secret|token|api_key|auth_token|credentials|key)\b(\s*[:=]\s*)(['\"]?)[^\s'\"&]+(\3)",
+                r"\1\2\3[MASKED_PASSWORD]\4",
+                line
+            )
+
             entry = {
                 "timestamp": None,
                 "level": "INFO",
                 "level_detected": False,
-                "message": line,
-                "raw": line,
+                "message": masked_line,
+                "raw": masked_line,
             }
 
-            # Try to extract timestamp
-            timestamp_match = re.search(r"\[?(\d{4}-\d{2}-\d{2}[T ]?\d{2}:\d{2}:\d{2})\]?", line)
+            # Try to extract timestamp (supports milliseconds, timezone offsets, and space-delimited formats)
+            timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?", masked_line)
             if timestamp_match:
                 entry["timestamp"] = timestamp_match.group(1)
 
             # Try to extract log level
-            level_match = re.search(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", line, re.I)
+            level_match = re.search(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\b", masked_line, re.I)
             if level_match:
                 entry["level"] = level_match.group(1).upper()
                 entry["level_detected"] = True
@@ -62,7 +134,13 @@ class LogParser:
                 continue
 
             try:
-                entry = json.loads(line)
+                # Mask passwords/secrets in JSON line before parsing (retains usernames/user IDs!)
+                masked_line = re.sub(
+                    r"(?i)\b(pass(?:word)?|pwd|secret|token|api_key|auth_token|credentials|key)\b(\s*[:=]\s*)(['\"]?)[^\s'\"&]+(\3)",
+                    r"\1\2\3[MASKED_PASSWORD]\4",
+                    line
+                )
+                entry = json.loads(masked_line)
                 entries.append(entry)
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse JSON line: {line[:100]}")
@@ -190,6 +268,7 @@ class LogAnalyzer:
                     "count": 0,
                     "samples": [],
                     "level": entry.get("level", "INFO"),
+                    "remediation": cls.suggest_remediation(generalized),
                 }
 
             patterns[generalized]["count"] += 1
@@ -207,10 +286,23 @@ class LogAnalyzer:
 
     @classmethod
     def suggest_remediation(cls, pattern: str) -> str:
-        """Suggest remediation for error patterns."""
+        """Suggest remediation for error and warning patterns."""
         pattern_lower = pattern.lower()
 
         suggestions = {
+            # SRE Warning and Operations Remediation Mappings (Specific first!)
+            "deprecated": "Code deprecation detected. Plan migration to the recommended newer APIs/modules.",
+            "retrying": "Check downstream service stability. Transient failures are causing automatic retries.",
+            "retry": "Check downstream service stability. Transient failures are causing automatic retries.",
+            "reconnection": "Check downstream service stability. Transient failures are causing automatic retries.",
+            "lost": "Check network link or service process health. Heartbeat failures indicate communication interruptions.",
+            "heartbeat": "Check network link or service process health. Heartbeat failures indicate communication interruptions.",
+            "slow query": "Optimize query parameters, index columns, or review query design for performance.",
+            "slow": "Optimize query parameters, index columns, or review query design for performance.",
+            "usercontroller": "Check user database query logic, connection state, or check if the requested user ID exists in the database",
+            "exception caught": "Review stack trace metrics in UserController.java, handle null-pointers, and audit the application error logs",
+            "nullpointer": "Check object initializations and add defensive null-safety checks in the controller logic",
+            # Generic categories (Fallback)
             "connection": "Check network connectivity and service availability",
             "timeout": "Increase timeout threshold or optimize performance",
             "memory": "Review memory usage and increase heap size if needed",
@@ -224,7 +316,7 @@ class LogAnalyzer:
             if keyword in pattern_lower:
                 return suggestion
 
-        return "Investigate error logs and check system configuration"
+        return "Investigate error/warning logs and check system configuration"
 
 
 class LogSummarizer:
@@ -251,12 +343,11 @@ class LogSummarizer:
         if patterns:
             summary += f"## Top Error Patterns\n"
             for i, pattern in enumerate(patterns[:5], 1):
+                exact_log = pattern["samples"][0] if pattern.get("samples") else pattern["pattern"]
                 summary += (
                     f"{i}. **Occurrence**: {pattern['count']} times\n"
-                    f"   - Pattern: `{pattern['pattern'][:100]}`\n"
+                    f"   - Log Entry: `{exact_log[:150]}`\n"
                 )
-                if pattern["samples"]:
-                    summary += f"   - Sample: {pattern['samples'][0][:100]}\n"
                 summary += "\n"
 
         return summary

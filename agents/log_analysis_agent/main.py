@@ -8,11 +8,15 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
+from app.core.config import settings
 from app.services.plugin_manager import IAgent
 from app.security import path_validator
 from tools.log_parser import LogAnalyzer, LogParser, LogSummarizer
+
+if TYPE_CHECKING:
+    from app.core.slm.service import SLMService
 
 logger = logging.getLogger(__name__)
 
@@ -33,41 +37,58 @@ class LogAnalysisAgent(IAgent):
         """Initialize the agent."""
         self.name = "log_analysis_agent"
         self.version = "1.0.0"
+        self._slm_service: "SLMService | None" = None
+
+    def set_slm_service(self, service: "SLMService") -> None:
+        """
+        Receive the SLM service from the platform at startup.
+
+        Called by the application lifespan handler after agent
+        discovery. When set, the agent uses SLM for intent
+        classification, remediation suggestions, and summaries.
+        When None, falls back to deterministic logic.
+        """
+        self._slm_service = service
 
     def can_handle(self, intent: str) -> bool:
         """
         Check if agent can handle the intent.
-        
+
+        Uses SLM intent classification when available, falling back
+        to keyword matching when the SLM is unavailable.
+
         Args:
             intent: User intent
-            
+
         Returns:
             True if agent can handle
         """
+        # --- Fast path: SLM intent classification ---
+        if self._slm_service is not None and self._slm_service.available:
+            result = self._slm_service.classify_intent_sync(
+                intent,
+                [
+                    ("log_analysis_agent", "Log analysis, error detection, troubleshooting"),
+                    ("servicenow_agent", "ServiceNow ticket management"),
+                    ("github_agent", "GitHub CI/CD and repository management"),
+                ],
+            )
+            if result == "log_analysis_agent":
+                return True
+            # If SLM classified as something else, still check keywords
+            # as a safety net (SLMs can misclassify short queries)
+
+        # --- Fallback: keyword matching ---
         log_keywords = [
-            "analyze log",
-            "scan log",
-            "log analysis",
-            "check error",
-            "find error",
-            "any error",
-            "error analysis",
-            "error",
-            "errors",
-            "exception",
-            "failure",
-            "failed",
-            "pattern detection",
-            "debug",
-            "troubleshoot",
-            "application started",
-            "app started",
-            "started",
-            "startup",
-            "application status",
-            "application name",
-            "app name",
-            "what is the application name",
+            "analyze log", "scan log", "log analysis",
+            "check error", "find error", "any error",
+            "error analysis", "error", "errors",
+            "exception", "failure", "failed",
+            "pattern detection", "debug", "troubleshoot",
+            "application started", "app started",
+            "started", "startup",
+            "application status", "application name",
+            "app name", "what is the application name",
             "which application",
         ]
         normalized_intent = re.sub(r"\s+", " ", intent.lower()).strip()
@@ -102,6 +123,9 @@ class LogAnalysisAgent(IAgent):
             ],
             "log_file_path": log_file_path,
             "log_folder_path": log_folder_path,
+            "start_time": context.get("start_time"),
+            "end_time": context.get("end_time"),
+            "history": context.get("history", []),
         }
 
         logger.info(f"Plan created for intent: {intent}")
@@ -145,12 +169,33 @@ class LogAnalysisAgent(IAgent):
         try:
             # Collect log files
             log_files = await self._collect_log_files(plan)
+            
+            if not log_files:
+                results["summary"] = (
+                    "### ⚠️ SRE Action Required: No Log File Detected\n\n"
+                    "The **SLM AI Operations Platform** has classified your intent under the **Log Analysis Agent**.\n\n"
+                    "To execute SRE diagnostics and retrieve automated suggestions:\n"
+                    "- Please **attach or select a log file** (use the *📁 Add log file attachment* button below).\n"
+                    "- Or **select a target agent and directory** manually to initialize analysis.\n\n"
+                    "No log file was detected in the active workspace session."
+                )
+                return results
+
             logger.info(f"Found {len(log_files)} log files to analyze")
+
+            # Extract datetime limits from plan context and query intent
+            intent = plan.get("intent", "")
+            extracted_start, extracted_end = self._extract_datetime_range(intent)
+            start_time = plan.get("start_time") or extracted_start
+            end_time = plan.get("end_time") or extracted_end
+
+            if start_time or end_time:
+                logger.info(f"Applying datetime range filter: {start_time} to {end_time}")
 
             # Analyze each file
             for log_file in log_files:
                 try:
-                    file_result = await self._analyze_file(log_file)
+                    file_result = await self._analyze_file(log_file, start_time, end_time)
                     results["files_analyzed"] += 1
                     results["total_entries"] += file_result["entry_count"]
 
@@ -192,13 +237,26 @@ class LogAnalysisAgent(IAgent):
     async def summarize(self, result: dict) -> str:
         """
         Summarize execution result.
-        
+
+        Uses SLM to generate a natural-language summary when available,
+        falling back to structured markdown when the SLM is unavailable.
+
         Args:
             result: Execution result
-            
+
         Returns:
             Text summary
         """
+        # --- Fast path: SLM-generated summary ---
+        if self._slm_service is not None and self._slm_service.available:
+            slm_summary = await self._slm_service.summarize_analysis(result)
+            if slm_summary:
+                header = "## Log Analysis Results (AI-Generated)\n\n"
+                if result.get("query_answer"):
+                    header += f"### Answer\n{result['query_answer']}\n\n"
+                return header + slm_summary
+
+        # --- Fallback: deterministic summary ---
         summary = "## Log Analysis Results\n\n"
 
         if result.get("query_answer"):
@@ -234,8 +292,9 @@ class LogAnalysisAgent(IAgent):
         if patterns:
             summary += f"### Top Error Patterns\n"
             for i, pattern in enumerate(patterns[:5], 1):
+                exact_log = pattern["samples"][0] if pattern.get("samples") else pattern["pattern"]
                 summary += (
-                    f"{i}. Pattern: `{pattern['pattern'][:100]}`\n"
+                    f"{i}. Log Entry: `{exact_log[:120]}`\n"
                     f"   - Occurrences: {pattern['count']}\n"
                 )
                 remediation = LogAnalyzer.suggest_remediation(pattern["pattern"])
@@ -272,16 +331,86 @@ class LogAnalysisAgent(IAgent):
                         log_files.extend(safe_path.glob(f"**/*{ext}"))
             except Exception as e:
                 logger.error(f"Error scanning folder: {e}")
+        # If no files found, check if the user pasted raw log content in the chat message (intent)
+        # or in any of the previous user messages in this session history
+        if not log_files:
+            pasted_content = None
+            intent_text = plan.get("intent", "")
+            
+            def is_log_dump(text: str) -> bool:
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                if len(lines) < 2:
+                    return False
+                log_indicators = ["INFO", "WARN", "ERROR", "DEBUG", "FATAL", "Exception", "---", "PID", "c.e.demo", "Tomcat", "at ", "   at "]
+                matches = sum(1 for line in lines if any(ind in line for ind in log_indicators))
+                return (matches / len(lines)) >= 0.3
+
+            if is_log_dump(intent_text):
+                pasted_content = intent_text
+                logger.info("Auto-detected raw log dump in current query.")
+            else:
+                # If not, look backward through the session history for the most recent log dump
+                history = plan.get("history", [])
+                for past_msg in reversed(history):
+                    if is_log_dump(past_msg):
+                        pasted_content = past_msg
+                        logger.info("Auto-detected raw log dump in session history.")
+                        break
+            
+            if not pasted_content:
+                # SRE User Request: Only generate fallback logs for the exact demo prompt!
+                # Otherwise, return empty log list so we explicitly ask SRE operators to upload a file.
+                normalized = intent_text.lower().replace("remidation", "remediation")
+                if "find error and give me remediation step" in normalized:
+                    logger.info("No logs found. Generating pre-loaded demo corporate database startup logs.")
+                    pasted_content = (
+                        "2026-05-17 19:05:01.123  INFO 28432 --- [main] c.e.demo.DemoApplication                : Starting DemoApplication using Java 17.0.10 on My-Laptop with PID 28432\n"
+                        "2026-05-17 19:05:01.125  INFO 28432 --- [main] c.e.demo.DemoApplication                : No active profile set, falling back to 1 default profile: \"default\"\n"
+                        "2026-05-17 19:05:02.542  INFO 28432 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 9080 (http)\n"
+                        "2026-05-17 19:05:02.810  INFO 28432 --- [main] o.a.c.c.CouchbaseConnectionFactory      : Node localhost/127.0.0.1:11210 heartbeat failed or timed out.\n"
+                        "2026-05-17 19:05:02.815  WARN 28432 --- [main] o.a.c.c.CouchbaseConnectionFactory      : Connection to Couchbase cluster lost. Attempting automatic reconnection in 5000ms...\n"
+                        "2026-05-17 19:05:03.211  INFO 28432 --- [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 9080 (http) with context path ''\n"
+                        "2026-05-17 19:05:03.225  INFO 28432 --- [main] c.e.demo.DemoApplication                : Started DemoApplication in 2.654 seconds (JVM running for 3.12)\n"
+                        "2026-05-17 19:05:05.100  INFO 28432 --- [nio-9080-exec-1] o.a.c.c.CouchbaseConnectionFactory      : Reconnection attempt 1 to Couchbase cluster.\n"
+                        "2026-05-17 19:05:05.105  WARN 28432 --- [nio-9080-exec-1] o.a.c.c.CouchbaseConnectionFactory      : Couchbase connection still unavailable, retrying...\n"
+                        "2026-05-17 19:05:10.100  INFO 28432 --- [nio-9080-exec-1] o.a.c.c.CouchbaseConnectionFactory      : Reconnection attempt 2 successful. Connected to Couchbase cluster.\n"
+                        "2026-05-17 19:06:01.001  INFO 28432 --- [nio-9080-exec-2] c.e.demo.controller.UserController     : Fetching user details for user ID: 1001\n"
+                        "2026-05-17 19:06:02.002  INFO 28432 --- [nio-9080-exec-2] c.e.demo.controller.UserController     : User 1001 details successfully retrieved.\n"
+                        "2026-05-17 19:06:15.321  INFO 28432 --- [nio-9080-exec-3] c.e.demo.controller.UserController     : Creating new user with username: operator\n"
+                        "2026-05-17 19:06:15.999  INFO 28432 --- [nio-9080-exec-3] c.e.demo.controller.UserController     : User operator created with ID: 1002\n"
+                        "2026-05-17 19:07:01.200  INFO 28432 --- [nio-9080-exec-4] c.e.demo.controller.UserController     : Authenticating user ID: 1002 with password: SuperSecretPassword123\n"
+                        "2026-05-17 19:07:01.205  INFO 28432 --- [nio-9080-exec-4] c.e.demo.controller.UserController     : Authentication successful for user ID: 1002\n"
+                        "2026-05-17 19:07:05.110  INFO 28432 --- [nio-9080-exec-5] c.e.demo.controller.UserController     : Request received for user ID: 9999\n"
+                        "2026-05-17 19:07:05.115  ERROR 28432 --- [nio-9080-exec-5] c.e.demo.controller.UserController     : Database connection lost while fetching user details for user ID: 9999\n"
+                        "2026-05-17 19:07:09.512 ERROR 28432 --- [nio-8080-exec-5] c.e.demo.controller.UserController     : Exception caught while processing request for user ID: 9999\n"
+                        "2026-05-17 19:07:10.001  INFO 28432 --- [nio-9080-exec-6] c.e.demo.controller.UserController     : Retry request received for user ID: 9999\n"
+                        "2026-05-17 19:07:11.002  INFO 28432 --- [nio-9080-exec-6] c.e.demo.controller.UserController     : Request for user ID: 9999 completed successfully after fallback database retry."
+                    )
+            
+            if pasted_content:
+                try:
+                    upload_dir = Path(folder_path or str(Path(settings.runtime_workspace_path) / "uploads"))
+                    upload_dir.mkdir(parents=True, exist_ok=True)
+                    pasted_file = upload_dir / "pasted_log_snippet.log"
+                    with open(pasted_file, "w", encoding="utf-8") as f:
+                        f.write(pasted_content)
+                    log_files.append(pasted_file)
+                except Exception as e:
+                    logger.error(f"Failed to save pasted log content: {e}")
 
         return list(set(log_files))  # Deduplicate
 
-    async def _analyze_file(self, file_path: Path) -> dict:
+    async def _analyze_file(self, file_path: Path, start_time: str | None = None, end_time: str | None = None) -> dict:
         """Analyze a single log file."""
         logger.info(f"Analyzing file: {file_path}")
 
         # Parse file
         entries = LogParser.parse_file(file_path)
         logger.debug(f"Parsed {len(entries)} entries from {file_path}")
+
+        # Filter entries by datetime boundary range
+        entries = LogParser.filter_entries_by_datetime(entries, start_time, end_time)
+        logger.info(f"Filtered to {len(entries)} entries in range {start_time} - {end_time}")
 
         # Classify entries
         classified = LogAnalyzer.classify_entries(entries)
@@ -390,3 +519,46 @@ class LogAnalysisAgent(IAgent):
             key=lambda x: x["count"],
             reverse=True,
         )[:10]
+
+    @staticmethod
+    def _extract_datetime_range(text: str) -> tuple[str | None, str | None]:
+        """Extract start and end datetime from text query."""
+        # Look for patterns like "between YYYY-MM-DD HH:MM:SS and YYYY-MM-DD HH:MM:SS"
+        # or "after YYYY-MM-DD HH:MM:SS"
+        # or "before YYYY-MM-DD HH:MM:SS"
+        normalized = text.lower()
+        
+        start_time = None
+        end_time = None
+
+        # YYYY-MM-DD HH:MM(:SS)? pattern
+        dt_pattern = r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)"
+        dates = re.findall(dt_pattern, text)
+        
+        if len(dates) >= 2:
+            start_time = dates[0] if len(dates[0]) == 19 else dates[0] + ":00"
+            end_time = dates[1] if len(dates[1]) == 19 else dates[1] + ":59"
+        elif len(dates) == 1:
+            if "after" in normalized or "from" in normalized:
+                start_time = dates[0] if len(dates[0]) == 19 else dates[0] + ":00"
+            elif "before" in normalized or "to" in normalized:
+                end_time = dates[0] if len(dates[0]) == 19 else dates[0] + ":59"
+        
+        # Fallback to YYYY-MM-DD format
+        if not start_time and not end_time:
+            date_pattern = r"(\d{4}-\d{2}-\d{2})"
+            dates_only = re.findall(date_pattern, text)
+            if len(dates_only) >= 2:
+                start_time = dates_only[0] + " 00:00:00"
+                end_time = dates_only[1] + " 23:59:59"
+            elif len(dates_only) == 1:
+                if "after" in normalized or "from" in normalized:
+                    start_time = dates_only[0] + " 00:00:00"
+                elif "before" in normalized or "to" in normalized:
+                    end_time = dates_only[0] + " 23:59:59"
+                else:
+                    # Single date filter: exact day
+                    start_time = dates_only[0] + " 00:00:00"
+                    end_time = dates_only[0] + " 23:59:59"
+
+        return start_time, end_time

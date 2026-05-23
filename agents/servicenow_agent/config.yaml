@@ -1,0 +1,32 @@
+# ServiceNow Agent Configuration
+name: servicenow_agent
+version: 1.0.0
+
+# Mock instance details for on-premise execution
+api:
+  instance_url: "https://mock-company.service-now.com"
+  username: "admin_ops_ai"
+  timeout_seconds: 15
+  offline_mode: true
+
+# SLA Threshold constraints (in hours)
+sla_rules:
+  p1_hours: 1
+  p2_hours: 4
+  p3_hours: 24
+  p4_hours: 72
+
+# Search parameters
+search:
+  max_results: 5
+  similarity_threshold: 0.6
+  default_fields:
+    - "sys_id"
+    - "number"
+    - "short_description"
+    - "severity"
+    - "state"
+    - "assignment_group"
+    - "assigned_to"
+    - "closed_at"
+    - "close_notes"

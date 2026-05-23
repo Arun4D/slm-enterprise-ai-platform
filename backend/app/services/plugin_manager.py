@@ -239,11 +239,34 @@ class PluginManager:
                 sys.path.insert(0, plugin_path_str)
                 path_added = True
 
+            # Namespace conflict resolution:
+            # Backup and temporarily remove conflicting generic module names ('tools', 'prompts')
+            # and their submodules from sys.modules during execution, so python reloads them from new sys.path.
+            modules_to_isolate = ["tools", "prompts"]
+            backed_up_modules = {}
+            
+            for mod_name in list(sys.modules.keys()):
+                for prefix in modules_to_isolate:
+                    if mod_name == prefix or mod_name.startswith(prefix + "."):
+                        backed_up_modules[mod_name] = sys.modules[mod_name]
+                        del sys.modules[mod_name]
+
             try:
                 spec.loader.exec_module(module)
+                
+                # Cache the loaded modules uniquely under this plugin's namespace
+                for mod_name in list(sys.modules.keys()):
+                    for prefix in modules_to_isolate:
+                        if mod_name == prefix or mod_name.startswith(prefix + "."):
+                            unique_key = f"plugin.{manifest.name}.{mod_name}"
+                            sys.modules[unique_key] = sys.modules[mod_name]
             finally:
                 if path_added:
                     sys.path.remove(plugin_path_str)
+                
+                # Restore the backed-up modules for previously loaded plugins
+                for mod_name, mod_obj in backed_up_modules.items():
+                    sys.modules[mod_name] = mod_obj
 
             # Get agent class and instantiate
             agent_class = getattr(module, manifest.agent_class)

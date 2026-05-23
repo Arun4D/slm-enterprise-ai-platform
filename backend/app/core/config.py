@@ -30,10 +30,19 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000", "http://localhost:4173"]
 
     # SLM Model Configuration
-    slm_model_path: str = "/models/phi-3-mini-gguf/model.gguf"
+    slm_enabled: bool = True  # Master toggle for SLM features
+    slm_model_path: str = str(ROOT_PATH / "backend" / "models" / "phi-3-mini-gguf" / "model.gguf")
     slm_model_context_size: int = 2048
     slm_model_threads: int = 4
     slm_model_gpu_layers: int = 0  # Set > 0 to offload to GPU
+
+    # Relational Conversational Memory
+    sqlite_db_url: str = f"sqlite:///{ROOT_PATH}/backend/app.db"
+
+    # SLM Inference Tuning
+    slm_temperature: float = 0.1  # 0.0 = deterministic, higher = more creative
+    slm_max_tokens: int = 256  # Default max tokens per generation
+    slm_top_p: float = 0.9  # Nucleus sampling threshold
 
     # Security
     jwt_secret_key: str = "change-this-secret-key-in-production"
@@ -53,6 +62,7 @@ class Settings(BaseSettings):
         str(ROOT_PATH / "agents"),
         str(ROOT_PATH / "plugins"),
         "/tmp/slm-enterprise-ai-platform",
+        "/home/arun/Workspace",
     ]
 
     # Audit

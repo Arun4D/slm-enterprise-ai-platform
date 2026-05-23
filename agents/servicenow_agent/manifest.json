@@ -1,0 +1,21 @@
+{
+  "name": "servicenow_agent",
+  "version": "1.0.0",
+  "description": "Searches incidents, resolves tickets, analyzes trends, and extracts RCA from ServiceNow",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "ServiceNowAgent",
+  "capabilities": [
+    "incident_search",
+    "incident_lookup",
+    "rca_extraction",
+    "similarity_detection",
+    "trend_analysis"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "network:outbound",
+    "servicenow:read"
+  ],
+  "min_llm_version": "7b"
+}
