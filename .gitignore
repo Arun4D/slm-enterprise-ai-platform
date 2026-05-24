@@ -71,7 +71,8 @@ htmlcov/
 *.db-journal
 
 # SLM model artifacts and caches
-models/
+/backend/models/
+/models/
 *.gguf
 *.bin
 *.pt
