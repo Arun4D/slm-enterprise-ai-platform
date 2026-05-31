@@ -44,6 +44,34 @@ def _safe_upload_path(upload_root: Path, filename: str | None) -> Path:
     return upload_root.joinpath(*safe_parts)
 
 
+async def _persist_uploaded_files(upload_root: Path, files: list[UploadFile]) -> tuple[list[str], str]:
+    """Persist uploaded files and return display names plus combined UTF-8 text."""
+    max_total_bytes = 20 * 1024 * 1024
+    total_bytes = 0
+    uploaded_names: list[str] = []
+    text_parts: list[str] = []
+    upload_root.mkdir(parents=True, exist_ok=True)
+
+    for upload in files:
+        destination = _safe_upload_path(upload_root, upload.filename)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        chunks: list[bytes] = []
+        with destination.open("wb") as out_file:
+            while chunk := await upload.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > max_total_bytes:
+                    raise HTTPException(status_code=413, detail="Uploaded files exceed 20 MB total limit")
+                out_file.write(chunk)
+                chunks.append(chunk)
+        content = b"".join(chunks)
+        relative_name = str(destination.relative_to(upload_root))
+        uploaded_names.append(relative_name)
+        decoded = content.decode("utf-8", errors="ignore")
+        text_parts.append(f"\n\n# File: {relative_name}\n{decoded}")
+
+    return uploaded_names, "\n".join(text_parts).strip()
+
+
 @router.get("/health", response_model=HealthCheckResponse)
 async def health_check() -> dict:  # type: ignore
     """
@@ -148,17 +176,18 @@ async def analyze_agent_files(
     file_path: str | None = Form(None),
     files: list[UploadFile] | None = File(None),
 ) -> dict:  # type: ignore
-    """Upload browser-selected files or execute a local file/folder-oriented agent."""
+    """Upload browser-selected files or execute a local file/folder/code-oriented agent."""
     from app.main import agent_registry
     from app.security import path_validator
 
     if not agent_registry:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
-    if agent_id != "log_analysis_agent":
+    code_validation_agents = {"github_actions_agent", "terraform_agent", "ansible_agent"}
+    if agent_id != "log_analysis_agent" and agent_id not in code_validation_agents:
         raise HTTPException(
             status_code=400,
-            detail="File analysis is only enabled for log_analysis_agent",
+            detail="File analysis is enabled for log_analysis_agent and code validation agents only",
         )
 
     # 1. Direct Local File Path Support (Runtime Configurable)
@@ -166,21 +195,45 @@ async def analyze_agent_files(
         try:
             safe_path = path_validator.sanitize_path(file_path)
             if not safe_path.is_file():
-                raise HTTPException(status_code=404, detail="Target log file not found.")
+                raise HTTPException(status_code=404, detail="Target file not found.")
 
             # Proactively check read permission
             try:
-                with safe_path.open("r", encoding="utf-8", errors="ignore") as f:
-                    pass
+                file_text = safe_path.read_text(encoding="utf-8", errors="ignore")
             except PermissionError:
                 raise HTTPException(
                     status_code=403,
                     detail=(
                         "Permission Denied: The platform uvicorn server does not have read permissions "
-                        f"for the local log file '{file_path}'. Please run 'chmod +r' on the file to "
+                        f"for the local file '{file_path}'. Please run 'chmod +r' on the file to "
                         "grant read access."
                     )
                 )
+
+            if agent_id in code_validation_agents:
+                result = await agent_registry.execute_agent(
+                    agent_id=agent_id,
+                    intent=f"validate local code/config file: {intent}",
+                    context={
+                        "intent": intent,
+                        "code_text": file_text,
+                        "uploaded_text": file_text,
+                        "uploaded_files": [safe_path.name],
+                        "file_path": str(safe_path),
+                        "session_id": session_id or str(uuid4()),
+                    },
+                )
+
+                return {
+                    "execution_id": f"exec_{agent_id}_{datetime.utcnow().timestamp()}",
+                    "agent_id": agent_id,
+                    "status": result["status"],
+                    "result": {
+                        **(result.get("result") or {}),
+                        "summary": result.get("summary", ""),
+                    },
+                    "execution_time_ms": 0.0,
+                }
 
             execution_intent = f"analyze log file: {intent}"
             result = await agent_registry.execute_agent(
@@ -219,16 +272,35 @@ async def analyze_agent_files(
 
     folder_id = session_id or str(uuid4())
     upload_root = Path(settings.runtime_workspace_path) / "uploads" / folder_id
-    upload_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        for upload in files:
-            destination = _safe_upload_path(upload_root, upload.filename)
-            destination.parent.mkdir(parents=True, exist_ok=True)
+        uploaded_names, uploaded_text = await _persist_uploaded_files(upload_root, files)
 
-            with destination.open("wb") as out_file:
-                while chunk := await upload.read(1024 * 1024):
-                    out_file.write(chunk)
+        if agent_id in code_validation_agents:
+            execution_intent = f"validate uploaded code/config files: {intent}"
+            result = await agent_registry.execute_agent(
+                agent_id=agent_id,
+                intent=execution_intent,
+                context={
+                    "intent": intent,
+                    "code_text": uploaded_text,
+                    "uploaded_text": uploaded_text,
+                    "uploaded_files": uploaded_names,
+                    "upload_folder_path": str(upload_root),
+                    "session_id": folder_id,
+                },
+            )
+
+            return {
+                "execution_id": f"exec_{agent_id}_{datetime.utcnow().timestamp()}",
+                "agent_id": agent_id,
+                "status": result["status"],
+                "result": {
+                    **(result.get("result") or {}),
+                    "summary": result.get("summary", ""),
+                },
+                "execution_time_ms": 0.0,
+            }
 
         execution_intent = f"analyze log files: {intent}"
         result = await agent_registry.execute_agent(
@@ -490,13 +562,25 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     # Semantic Keyword-based Router Fallback (Ensures high accuracy in offline evaluation)
                     normalized_message = request.message.lower()
                     
+                    github_keywords = ["github", "actions", "workflow", "runner", "ci/cd", "pipeline", ".github/workflows"]
+                    terraform_keywords = ["terraform", "hcl", "tf plan", "security group", "ingress", "aws_", "module "]
+                    ansible_keywords = ["ansible", "playbook", "inventory", "hosts:", "ansible.builtin", "yaml"]
                     snow_keywords = ["servicenow", "snow", "incident", "ticket", "inc", "rca", "resolution", "client", "close notes", "trends", "user", "db"]
                     log_keywords = ["log", "error", "tomcat", "java", "exception", "warn", "parse", "scan", "evtx", "diagnose"]
                     
+                    github_score = sum(1 for kw in github_keywords if kw in normalized_message)
+                    terraform_score = sum(1 for kw in terraform_keywords if kw in normalized_message)
+                    ansible_score = sum(1 for kw in ansible_keywords if kw in normalized_message)
                     snow_score = sum(1 for kw in snow_keywords if kw in normalized_message)
                     log_score = sum(1 for kw in log_keywords if kw in normalized_message)
                     
-                    if "servicenow" in normalized_message or "snow" in normalized_message or "incident" in normalized_message or "ticket" in normalized_message or "inc" in normalized_message:
+                    if github_score > 0 and github_score >= max(terraform_score, ansible_score, snow_score, log_score):
+                        target_agent_id = "github_actions_agent"
+                    elif terraform_score > 0 and terraform_score >= max(ansible_score, snow_score, log_score):
+                        target_agent_id = "terraform_agent"
+                    elif ansible_score > 0 and ansible_score >= max(snow_score, log_score):
+                        target_agent_id = "ansible_agent"
+                    elif "servicenow" in normalized_message or "snow" in normalized_message or "incident" in normalized_message or "ticket" in normalized_message or "inc" in normalized_message:
                         target_agent_id = "servicenow_agent"
                     elif log_score > snow_score:
                         target_agent_id = "log_analysis_agent"
@@ -505,7 +589,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     else:
                         target_agent_id = "log_analysis_agent"
                         
-                    logger.info(f"SLM Service unavailable. Fallback router routed query to: {target_agent_id} (Scores - log: {log_score}, snow: {snow_score})")
+                    logger.info(f"SLM Service unavailable. Fallback router routed query to: {target_agent_id}")
 
             yield f"data: {json.dumps({'event': 'routing', 'data': f'Routed query to agent: {target_agent_id}'})}\n\n"
             await asyncio.sleep(0.05)
@@ -537,6 +621,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     "history": user_history,
                     "start_time": request.start_time,
                     "end_time": request.end_time,
+                    "code_text": request.message,
                 }
             )
 
@@ -578,3 +663,69 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/security/allow-path")
+async def add_allowed_path(path: str = Form(...)):
+    """Add a path to the file allowlist dynamically."""
+    from app.security import path_validator
+    from pathlib import Path
+    try:
+        resolved_path = Path(path).resolve()
+        target_dir = resolved_path.parent if resolved_path.is_file() else resolved_path
+        if not target_dir.exists():
+            target_dir.mkdir(parents=True, exist_ok=True)
+        if target_dir not in path_validator.allowed_paths:
+            path_validator.allowed_paths.append(target_dir)
+        return {"status": "success", "allowed_paths": [str(p) for p in path_validator.allowed_paths]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/logs/list-files")
+async def list_log_files(folder_path: str):
+    """List log and text files in a specified folder path."""
+    from pathlib import Path
+    from app.security import path_validator
+    try:
+        resolved_dir = Path(folder_path).resolve()
+        if not resolved_dir.is_dir():
+            # If path does not exist, let's create it dynamically
+            resolved_dir.mkdir(parents=True, exist_ok=True)
+        
+        if resolved_dir not in path_validator.allowed_paths:
+            path_validator.allowed_paths.append(resolved_dir)
+            
+        files = []
+        for p in resolved_dir.rglob("*"):
+            if p.is_file() and p.suffix.lower() in [".log", ".txt", ".json", ".jsonl"]:
+                files.append(str(p))
+        return {"status": "success", "files": sorted(files)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/agents/{agent_id}/enable")
+async def enable_agent(agent_id: str) -> dict:
+    """Enable an agent by ID."""
+    from app.main import agent_registry
+    if not agent_registry:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    try:
+        agent_registry.enable_agent(agent_id)
+        return {"status": "success", "agent_id": agent_id, "enabled": True}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/agents/{agent_id}/disable")
+async def disable_agent(agent_id: str) -> dict:
+    """Disable an agent by ID."""
+    from app.main import agent_registry
+    if not agent_registry:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    try:
+        agent_registry.disable_agent(agent_id)
+        return {"status": "success", "agent_id": agent_id, "enabled": False}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))

@@ -1,0 +1,28 @@
+name: terraform_agent
+version: 1.0.0
+guardrails:
+  supported_inputs:
+    - pasted_text
+    - browser_upload
+    - local_file_path
+  validation_extensions:
+    - ".tf"
+    - ".tfvars"
+    - ".json"
+    - ".txt"
+  allow_open_ssh_ingress: false
+  require_tags:
+    - "Environment"
+    - "Owner"
+  disallowed_regions:
+    - "us-east-1"  # For demonstration purposes
+costs:
+  currency: "USD"
+  limit_per_month: 500
+generation:
+  mode: deterministic_template
+  default_templates:
+    - secure_instance
+    - encrypted_vpc
+  orchestrator_model: phi-3-mini-gguf
+  slm_execution_policy: route_plan_summarize_only

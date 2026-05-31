@@ -100,10 +100,59 @@ B. ServiceNow Agent
 - Resolution trends
 
 C. GitHub Actions Agent
+- Parse runner pipeline execution logs
+- Detect non-zero exit codes
+- Suggest dynamic node allocations
+- Identify package build failures
+- Direct CI/CD runner repairs
+- **Code Generation**: Generate secure, highly optimized GitHub Actions CI/CD workflows and configurations to fast-track developer setup
+- **Code Validation**: Validate pasted chat text, local files, or uploaded workflow YAML/logs for trigger coverage, runner definitions, action pinning, least-privilege `permissions`, inline secret risk, dependency-cache usage, and non-reproducible build commands
+- Generated workflows MUST be deterministic Python template outputs reviewed by the agent guardrail engine; the local SLM may route/plan/summarize only and MUST NOT directly execute or invent CI/CD commands
+- Validation inputs MUST support both browser file uploads and pasted text in chat
+
 D. Terraform Agent
+- Validate Terraform plans and plan files
+- Scan static security configurations
+- Enforce strict public ingress port guardrails
+- Audit resource tag completeness
+- Provide cloud safety mitigations
+- **Code Generation**: Generate secure, compliant HCL resource blocks (such as encrypted VPCs or secure instances with standard tags) to fast-track infrastructure development
+- **Code Validation**: Validate pasted chat text, local files, or uploaded `.tf`/plan content for public admin ingress, plaintext HTTP exposure, encryption defaults, required tags, provider secret leakage, and resource/module structure
+- Generated HCL MUST use approved deterministic Python templates with secure defaults; the local SLM may route/plan/summarize only and MUST NOT directly provision infrastructure
+- Validation inputs MUST support both browser file uploads and pasted text in chat
+
 E. Ansible Agent
+- Parse playbooks and task attributes
+- Validate YAML syntactic configurations
+- Review package module installations over raw shell
+- Scan dry-run ping connectivity status
+- Trace inventory nodes latency
+- **Code Generation**: Generate modular, idempotent YAML playbooks (such as system updates or Nginx webservers) to fast-track host provisioning
+- **Code Validation**: Validate pasted chat text, local files, or uploaded playbooks/inventory snippets for play targets, task sections, raw shell/command usage, package state declarations, explicit privilege escalation, inline secret risk, and named tasks
+- Generated playbooks MUST use deterministic Python templates and Ansible built-in modules; the local SLM may route/plan/summarize only and MUST NOT directly execute playbooks
+- Validation inputs MUST support both browser file uploads and pasted text in chat
+
 F. Monitoring Agent
-G. VMware/Nutanix Agent
+- Fetch virtualization resource metrics
+- Monitor VM CPU and Memory limits
+- Audit storage allocation bounds
+- Consolidate active site reliability alerts
+- Synthesize virtual container mitigations
+
+G. VMware Agent
+- Scan physical VMware ESXi cluster nodes and virtual center structures
+- Map active SSD and SATA datastore allocations
+- Verify vCPU allocations and RAM overcommit levels
+- Execute VM storage migrations (vMotion workflows)
+- **Operational Q&A**: Resolve natural language questions regarding physical host server count, cluster usage/utilization, CPU/Memory profiles, and virtual networks
+
+H. Nutanix Agent
+- Audit hyperconverged infrastructure (HCI) storage pools and tiers
+- Verify replication resiliency factor compliance (RF2 vs RF3)
+- Scans virtual machine overcommits and CPU limits
+- Audit Nutanix hypervisor configurations using Prism Central API
+- **Operational Q&A**: Resolve natural language questions regarding node counts, storage capacity usage, CPU/Memory configurations, and virtual switches/backplanes
+
 
 # PLUGIN SYSTEM REQUIREMENTS:
 - Drop-in new folder under /agents

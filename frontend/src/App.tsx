@@ -76,8 +76,18 @@ const initialMessages: Message[] = [
 const fallbackAgents: Agent[] = [
   { id: 'auto', name: '⚡ Auto Router (SLM)' },
   { id: 'log_analysis_agent', name: '📁 Log Analysis Agent' },
-  { id: 'servicenow_agent', name: '🎫 ServiceNow Agent' }
+  { id: 'servicenow_agent', name: '🎫 ServiceNow Agent' },
+  { id: 'github_actions_agent', name: '⚙️ GitHub Actions Agent' },
+  { id: 'terraform_agent', name: '🛠️ Terraform Agent' },
+  { id: 'ansible_agent', name: '⚡ Ansible Agent' }
 ];
+
+const fileEnabledAgents = new Set([
+  'log_analysis_agent',
+  'github_actions_agent',
+  'terraform_agent',
+  'ansible_agent'
+]);
 
 function LogAnalysisCard({ result, compact = false, theme = 'dark' }: { result: LogAnalysisResult; compact?: boolean; theme?: 'light' | 'dark' }) {
   const classified = result.classified_entries ?? {};
@@ -174,10 +184,96 @@ function LogAnalysisCard({ result, compact = false, theme = 'dark' }: { result: 
 
 function RichText({ text, theme = 'dark' }: { text: string; theme?: 'light' | 'dark' }) {
   const lines = text.split('\n');
+  const blocks: Array<
+    | { type: 'code'; language: string; content: string }
+    | { type: 'table'; rows: string[][] }
+    | { type: 'line'; line: string; index: number }
+  > = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      const language = trimmed.replace(/^```/, '').trim() || 'code';
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      blocks.push({ type: 'code', language, content: codeLines.join('\n') });
+      continue;
+    }
+
+    if (/^\|.*\|$/.test(trimmed)) {
+      const tableLines: string[] = [];
+      while (index < lines.length && /^\|.*\|$/.test(lines[index].trim())) {
+        if (!lines[index].includes('---')) tableLines.push(lines[index]);
+        index += 1;
+      }
+      index -= 1;
+      const rows = tableLines.map((tableLine) =>
+        tableLine
+          .split('|')
+          .map((cell) => cell.trim().replace(/\*\*/g, '').replace(/`/g, ''))
+          .filter(Boolean)
+      );
+      blocks.push({ type: 'table', rows });
+      continue;
+    }
+
+    blocks.push({ type: 'line', line, index });
+  }
 
   return (
     <div className={`space-y-2.5 leading-6 transition-colors ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>
-      {lines.map((line, index) => {
+      {blocks.map((block, blockIndex) => {
+        if (block.type === 'code') {
+          return (
+            <div
+              key={`code-${blockIndex}`}
+              className={`overflow-hidden rounded-xl border text-left shadow-sm ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-950'}`}
+            >
+              <div className={`flex items-center justify-between border-b px-4 py-2 ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-400' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
+                <span className="text-[10px] font-bold uppercase tracking-wider">{block.language}</span>
+              </div>
+              <pre className="max-w-full overflow-x-auto p-4 text-[12px] leading-5 text-slate-100">
+                <code className="font-mono whitespace-pre">{block.content}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        if (block.type === 'table') {
+          const [header, ...body] = block.rows;
+          return (
+            <div key={`table-${blockIndex}`} className={`overflow-x-auto rounded-xl border ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
+              <table className="w-full border-collapse text-left text-xs">
+                {header && (
+                  <thead className={theme === 'dark' ? 'bg-slate-900 text-slate-300' : 'bg-slate-100 text-slate-700'}>
+                    <tr>
+                      {header.map((cell, cellIndex) => (
+                        <th key={cellIndex} className="border-b px-3 py-2 font-semibold">{cell}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody className={theme === 'dark' ? 'bg-slate-950/40 text-slate-300' : 'bg-white text-slate-700'}>
+                  {body.map((row, rowIndex) => (
+                    <tr key={rowIndex} className={theme === 'dark' ? 'border-t border-slate-800' : 'border-t border-slate-100'}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex} className="px-3 py-2 align-top font-mono text-[11px]">{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        const { line, index } = block;
         const trimmed = line.trim();
         if (!trimmed) return <div key={index} className="h-1" />;
         
@@ -200,16 +296,6 @@ function RichText({ text, theme = 'dark' }: { text: string; theme?: 'light' | 'd
         }
         if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
           return <p key={index} className={`pl-4 before:mr-2 before:content-['•'] ${theme === 'dark' ? 'text-slate-300 before:text-lime-400' : 'text-slate-700 before:text-emerald-500 font-medium'}`}>{trimmed.slice(2)}</p>;
-        }
-        if (/^\|.*\|$/.test(trimmed)) {
-          if (trimmed.includes('---')) return null; // skip headers separator
-          const cols = trimmed.split('|').map(c => c.trim()).filter(Boolean);
-          return (
-            <div key={index} className={`grid grid-cols-[160px_1fr] gap-3 rounded-lg border px-3 py-1.5 text-xs font-mono transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900/30 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-750'}`}>
-              <span className={`font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{cols[0]}</span>
-              <span>{cols[1]}</span>
-            </div>
-          );
         }
         if (/^\d+\.\s/.test(trimmed)) {
           return <p key={index} className={`rounded-xl border p-2.5 font-mono text-[11px] leading-4 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900/50 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>{trimmed}</p>;
@@ -262,6 +348,9 @@ function App() {
   const [activeLogTab, setActiveLogTab] = useState<'scan' | 'stream'>('scan');
   const [isTailing, setIsTailing] = useState(false);
   const [tailFilePath, setTailFilePath] = useState('backend/logs/app.log');
+  const [folderStreamPath, setFolderStreamPath] = useState('');
+  const [availableStreamFiles, setAvailableStreamFiles] = useState<string[]>([]);
+  const [isScanningStreamFolder, setIsScanningStreamFolder] = useState(false);
   const [tailLines, setTailLines] = useState<string[]>([]);
   const [tailResult, setTailResult] = useState<LogAnalysisResult | null>(null);
   const tailEventSourceRef = useRef<EventSource | null>(null);
@@ -348,29 +437,56 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const response = await fetch('/api/v1/agents');
-        if (!response.ok) throw new Error(`Failed to load agents`);
+  const fetchAgents = async () => {
+    try {
+      const response = await fetch('/api/v1/agents');
+      if (!response.ok) throw new Error(`Failed to load agents`);
 
-        const data = await response.json();
-        const loadedAgents = (data.agents ?? []) as Agent[];
-        if (loadedAgents.length > 0) {
-          const formattedList = [
-            { id: 'auto', name: '⚡ Auto Router (SLM)' },
-            ...loadedAgents.map(agent => ({
-              ...agent,
-              name: agent.id === 'log_analysis_agent' ? '📁 Log Analysis Agent' : agent.id === 'servicenow_agent' ? '🎫 ServiceNow Agent' : agent.name
-            }))
-          ];
-          setAvailableAgents(formattedList);
-        }
-      } catch (error) {
-        setAgentError('Agent service unavailable. Operating in fallback mode.');
+      const data = await response.json();
+      const loadedAgents = (data.agents ?? []) as Agent[];
+      if (loadedAgents.length > 0) {
+        const formattedList = [
+          { id: 'auto', name: '⚡ Auto Router (SLM)' },
+          ...loadedAgents.map(agent => ({
+            ...agent,
+            name: agent.id === 'log_analysis_agent'
+              ? '📁 Log Analysis Agent'
+              : agent.id === 'servicenow_agent'
+              ? '🎫 ServiceNow Agent'
+              : agent.id === 'github_actions_agent'
+              ? '⚙️ GitHub Actions Agent'
+              : agent.id === 'terraform_agent'
+              ? '🛠️ Terraform Agent'
+              : agent.id === 'ansible_agent'
+              ? '⚡ Ansible Agent'
+              : agent.id === 'monitoring_agent'
+              ? '📊 Monitoring Agent'
+              : agent.id === 'vmware_agent'
+              ? '💾 VMware Agent'
+              : agent.id === 'nutanix_agent'
+              ? '🚀 Nutanix Agent'
+              : agent.name
+          }))
+        ];
+        setAvailableAgents(formattedList);
       }
-    };
+    } catch (error) {
+      setAgentError('Agent service unavailable. Operating in fallback mode.');
+    }
+  };
 
+  const toggleAgent = async (agentId: string, currentEnabled: boolean) => {
+    try {
+      const endpoint = currentEnabled ? 'disable' : 'enable';
+      const response = await fetch(`/api/v1/agents/${agentId}/${endpoint}`, { method: 'POST' });
+      if (!response.ok) throw new Error(`Failed to toggle agent`);
+      await fetchAgents();
+    } catch (error) {
+      console.error('Error toggling agent:', error);
+    }
+  };
+
+  useEffect(() => {
     const fetchPlugins = async () => {
       try {
         const response = await fetch('/api/v1/plugins');
@@ -413,8 +529,8 @@ function App() {
     setMessages((prev) => [...prev, { role: 'assistant', text: '' }]);
 
     try {
-      // 1. File Upload specialized trigger (Fast path upload)
-      if ((selectedAgent === 'log_analysis_agent' || selectedAgent === 'auto') && attachments.length > 0) {
+      // 1. File Upload specialized trigger for logs and code/config validation
+      if (fileEnabledAgents.has(selectedAgent) && attachments.length > 0) {
         const formData = new FormData();
         formData.append('intent', promptText);
         formData.append('session_id', activeSessionId);
@@ -424,7 +540,7 @@ function App() {
           formData.append('files', file, file.name);
         });
 
-        const response = await fetch('/api/v1/agents/log_analysis_agent/analyze-files', {
+        const response = await fetch(`/api/v1/agents/${selectedAgent}/analyze-files`, {
           method: 'POST',
           body: formData
         });
@@ -438,7 +554,7 @@ function App() {
           updated[updated.length - 1] = {
             role: 'assistant',
             text: result.summary ?? 'Files processed.',
-            logResult: result
+            logResult: selectedAgent === 'log_analysis_agent' ? result : undefined
           };
           return updated;
         });
@@ -582,6 +698,42 @@ function App() {
     } finally {
       setIsAnalyzingLogs(false);
     }
+  };
+
+  const scanStreamFolder = async () => {
+    if (!folderStreamPath.trim()) return;
+    setIsScanningStreamFolder(true);
+    setTailError(null);
+    try {
+      const response = await fetch(`/api/v1/logs/list-files?folder_path=${encodeURIComponent(folderStreamPath)}`);
+      if (!response.ok) throw new Error('Failed to load logs list');
+      const data = await response.json();
+      setAvailableStreamFiles(data.files ?? []);
+      if (data.files && data.files.length > 0) {
+        setTailFilePath(data.files[0]);
+      } else {
+        setTailError("No `.log`, `.txt` or `.json` files found in the specified directory.");
+      }
+    } catch (e) {
+      setTailError("Failed to list files. Check directory path and read permissions.");
+    } finally {
+      setIsScanningStreamFolder(false);
+    }
+  };
+
+  const authorizeAndStartTailing = async () => {
+    if (!tailFilePath.trim()) return;
+    try {
+      const formData = new FormData();
+      formData.append('path', tailFilePath);
+      await fetch('/api/v1/security/allow-path', {
+        method: 'POST',
+        body: formData
+      });
+    } catch (e) {
+      console.warn("Path pre-authorization skipped", e);
+    }
+    startTailing();
   };
 
   const startTailing = () => {
@@ -888,43 +1040,45 @@ function App() {
                 )}
 
                 {/* 🕒 DATETIME RANGE FILTER BOUNDARY */}
-                <div className={`mb-4 rounded-2xl border p-3 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-300' : 'border-slate-200 bg-slate-50/50 text-slate-700'}`}>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-lg">🕒</span>
-                    <div className="text-left">
-                      <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-850'}`}>Datetime Boundary Filter</p>
-                      <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Limit log parser analysis or search to a specific range.</p>
+                {selectedAgent === 'log_analysis_agent' && (
+                  <div className={`mb-4 rounded-2xl border p-3 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-300' : 'border-slate-200 bg-slate-50/50 text-slate-700'}`}>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-lg">🕒</span>
+                      <div className="text-left">
+                        <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-850'}`}>Datetime Boundary Filter</p>
+                        <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Limit log parser analysis or search to a specific range.</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>Start:</span>
+                        <input
+                          type="datetime-local"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>End:</span>
+                        <input
+                          type="datetime-local"
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                        />
+                      </div>
+                      {(startTime || endTime) && (
+                        <button
+                          onClick={() => { setStartTime(''); setEndTime(''); }}
+                          className={`rounded px-2.5 py-1 text-[10px] font-bold border transition ${theme === 'dark' ? 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'border-red-200 bg-red-50 text-red-650 hover:bg-red-105'}`}
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>Start:</span>
-                      <input
-                        type="datetime-local"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>End:</span>
-                      <input
-                        type="datetime-local"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
-                      />
-                    </div>
-                    {(startTime || endTime) && (
-                      <button
-                        onClick={() => { setStartTime(''); setEndTime(''); }}
-                        className={`rounded px-2.5 py-1 text-[10px] font-bold border transition ${theme === 'dark' ? 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'border-red-200 bg-red-50 text-red-650 hover:bg-red-105'}`}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
+                )}
 
                 {/* MESSAGES VIEW WINDOW */}
                 <div className={`mb-4 max-h-[360px] overflow-y-auto space-y-3.5 rounded-3xl border p-4 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/70' : 'border-slate-250 bg-slate-50/50'}`}>
@@ -963,11 +1117,15 @@ function App() {
                     className={`min-h-[90px] w-full resize-none rounded-2xl border border-transparent bg-transparent px-3 py-2 text-xs outline-none transition ${theme === 'dark' ? 'text-slate-100 placeholder:text-slate-500 focus:placeholder:text-slate-600' : 'text-slate-800 placeholder:text-slate-400 focus:placeholder:text-slate-500'}`}
                   />
                   <div className={`flex items-center justify-between border-t pt-2.5 px-1.5 ${theme === 'dark' ? 'border-slate-900' : 'border-slate-100'}`}>
-                    <label className={`flex items-center gap-2 text-xs cursor-pointer transition ${theme === 'dark' ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}>
-                      <input type="file" multiple onChange={handleFiles} className="hidden" />
-                      <span className={`rounded-full border px-3 py-1.5 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 hover:bg-slate-800' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}>📁 Add log file attachment</span>
-                      {attachments.length > 0 && <span className={`text-[10px] font-bold ${theme === 'dark' ? 'text-lime-400' : 'text-emerald-600'}`}>({attachments.length} selected)</span>}
-                    </label>
+                    {fileEnabledAgents.has(selectedAgent) ? (
+                      <label className={`flex items-center gap-2 text-xs cursor-pointer transition ${theme === 'dark' ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}>
+                        <input type="file" multiple onChange={handleFiles} className="hidden" />
+                        <span className={`rounded-full border px-3 py-1.5 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 hover:bg-slate-800' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}>
+                          {selectedAgent === 'log_analysis_agent' ? '📁 Add log file attachment' : '📎 Add code/config files'}
+                        </span>
+                        {attachments.length > 0 && <span className={`text-[10px] font-bold ${theme === 'dark' ? 'text-lime-400' : 'text-emerald-600'}`}>({attachments.length} selected)</span>}
+                      </label>
+                    ) : <div />}
                     
                     <button
                       type="button"
@@ -1082,7 +1240,7 @@ function App() {
                 ) : (
                   <div className="space-y-6">
                     {/* Stream Configuration Header */}
-                    <div className={`flex flex-col gap-4 p-5 rounded-3xl border transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className={`flex flex-col gap-4 p-5 rounded-3xl border transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-white'}`}>
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
                           <h3 className={`text-md font-bold ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>⚡ Live Log Streamer</h3>
@@ -1109,7 +1267,7 @@ function App() {
                           
                           <button
                             type="button"
-                            onClick={isTailing ? stopTailing : startTailing}
+                            onClick={isTailing ? stopTailing : authorizeAndStartTailing}
                             className={`rounded-full px-6 py-2.5 text-xs font-bold transition shadow-md flex items-center gap-2 ${
                               isTailing 
                                 ? 'bg-red-500 text-white hover:bg-red-650 animate-pulse' 
@@ -1133,19 +1291,67 @@ function App() {
 
                       <div className="grid gap-4 md:grid-cols-3">
                         <div className="flex flex-col gap-1 md:col-span-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Log File Target Path</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Scan System Log Directory</span>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={folderStreamPath}
+                              onChange={(e) => setFolderStreamPath(e.target.value)}
+                              disabled={isTailing}
+                              placeholder="e.g. /home/arun/Workspace/backend/logs or C:\Logs"
+                              className={`flex-1 rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={scanStreamFolder}
+                              disabled={isTailing || isScanningStreamFolder}
+                              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${theme === 'dark' ? 'bg-slate-800 text-lime-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-750 hover:bg-slate-200'}`}
+                            >
+                              {isScanningStreamFolder ? 'Scanning...' : 'List Files'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Select Target Log File</span>
+                          {availableStreamFiles.length > 0 ? (
+                            <select
+                              value={tailFilePath}
+                              onChange={(e) => setTailFilePath(e.target.value)}
+                              disabled={isTailing}
+                              className={`rounded-xl border px-3 py-2 text-xs font-mono outline-none cursor-pointer transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                            >
+                              {availableStreamFiles.map((file) => (
+                                <option key={file} value={file}>{file.split(/[\\/]/).pop() || file}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={tailFilePath}
+                              onChange={(e) => setTailFilePath(e.target.value)}
+                              disabled={isTailing}
+                              placeholder="e.g. backend/logs/app.log"
+                              className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div className="flex flex-col gap-1 md:col-span-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Active Log Target Path</span>
                           <input
                             type="text"
                             value={tailFilePath}
                             onChange={(e) => setTailFilePath(e.target.value)}
                             disabled={isTailing}
-                            placeholder="e.g. backend/logs/app.log"
-                            className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
+                            className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-lime-400' : 'border-slate-250 bg-slate-50 text-emerald-650'}`}
                           />
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Optional Time Filter</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Optional Time Filter</span>
                           <div className="flex gap-2">
                             <input
                               type="datetime-local"
@@ -1366,44 +1572,7 @@ function App() {
                   </button>
                 </div>
 
-                {/* 🕒 DATETIME RANGE FILTER BOUNDARY */}
-                <div className={`rounded-2xl border p-3 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-300' : 'border-slate-200 bg-slate-50/50 text-slate-700'}`}>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-lg">🕒</span>
-                    <div className="text-left">
-                      <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-850'}`}>ITSM Datetime Boundary Filter</p>
-                      <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Filter ticket history search within a specific timeline range.</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>Start:</span>
-                      <input
-                        type="datetime-local"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>End:</span>
-                      <input
-                        type="datetime-local"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
-                      />
-                    </div>
-                    {(startTime || endTime) && (
-                      <button
-                        onClick={() => { setStartTime(''); setEndTime(''); }}
-                        className={`rounded px-2.5 py-1 text-[10px] font-bold border transition ${theme === 'dark' ? 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'border-red-200 bg-red-50 text-red-650 hover:bg-red-105'}`}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
+
 
                 {ticketResult && (
                   <div className={`rounded-xl border p-4 text-xs font-medium transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-650'}`}>
@@ -1460,33 +1629,42 @@ function App() {
                 <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Hot-load or disable agents seamlessly without core system rebuilds.</p>
                 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {[
-                    { title: 'Log Analysis Agent', desc: 'Parses txt, json, and evtx log structures to extract diagnostics.', active: true, tag: '📁 system' },
-                    { title: 'ServiceNow Agent', desc: 'Adapts REST endpoints offline to search tickets and extract RCA.', active: true, tag: '🎫 itsm' },
-                    { title: 'GitHub Actions Agent', desc: 'Analyses pipeline workflows logs to suggest runner repairs.', active: false, tag: '⚙️ cicd' },
-                    { title: 'Terraform Agent', desc: 'Validates plan structures against configuration guardrails.', active: false, tag: '🛠️ infra' },
-                    { title: 'Ansible Agent', desc: 'Automates playbook dry-runs and checks node availability.', active: false, tag: '⚡ automation' },
-                    { title: 'VMware Agent', desc: 'Scans hypervisors performance maps and detects over-allocation.', active: false, tag: '💾 vms' }
-                  ].map((p) => (
-                    <div key={p.title} className={`flex flex-col justify-between rounded-2xl border p-4 text-xs transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
-                      <div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{p.tag}</span>
-                          <span className={`h-1.5 w-1.5 rounded-full ${p.active ? (theme === 'dark' ? 'bg-lime-400 animate-pulse' : 'bg-emerald-500') : 'bg-slate-400'}`} />
-                        </div>
-                        <p className={`mt-2 font-bold text-sm ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>{p.title}</p>
-                        <p className={`mt-1.5 leading-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{p.desc}</p>
-                      </div>
+                  {availableAgents
+                    .filter(ag => ag.id !== 'auto')
+                    .map((ag) => {
+                      const agentDescriptions: Record<string, { desc: string, tag: string }> = {
+                        log_analysis_agent: { desc: 'Parses txt, json, and evtx log structures to extract diagnostics.', tag: '📁 system' },
+                        servicenow_agent: { desc: 'Adapts REST endpoints offline to search tickets and extract RCA.', tag: '🎫 itsm' },
+                        github_actions_agent: { desc: 'Analyses pipeline workflows logs to suggest runner repairs.', tag: '⚙️ cicd' },
+                        terraform_agent: { desc: 'Validates plan structures against configuration guardrails.', tag: '🛠️ infra' },
+                        ansible_agent: { desc: 'Automates playbook dry-runs and checks node availability.', tag: '⚡ automation' },
+                        monitoring_agent: { desc: 'Reviews hypervisor capacity maps, processes disk and memory alerts.', tag: '📊 monitoring' },
+                        vmware_agent: { desc: 'Scans hypervisors performance maps and detects over-allocation.', tag: '💾 vms' },
+                        nutanix_agent: { desc: 'Reviews Nutanix HCI clusters, storage pools, and hypervisor allocations.', tag: '🚀 hci' }
+                      };
+                      const metadata = agentDescriptions[ag.id] || { desc: (ag as any).description || 'Custom local agent plugin.', tag: '⚙️ agent' };
                       
-                      <button
-                        type="button"
-                        disabled={p.title.includes('Log') || p.title.includes('Service')}
-                        className={`mt-4 rounded-xl px-4 py-1.5 text-[10px] font-bold uppercase border transition w-full ${p.active ? (theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400 cursor-not-allowed' : 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed') : (theme === 'dark' ? 'bg-lime-400 border-transparent text-slate-950 hover:bg-lime-300' : 'bg-emerald-500 border-transparent text-white hover:bg-emerald-600')}`}
-                      >
-                        {p.active ? 'Enabled' : 'Deploy Plugin'}
-                      </button>
-                    </div>
-                  ))}
+                      return (
+                        <div key={ag.id} className={`flex flex-col justify-between rounded-2xl border p-4 text-xs transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{metadata.tag}</span>
+                              <span className={`h-1.5 w-1.5 rounded-full ${ag.enabled ? (theme === 'dark' ? 'bg-lime-400 animate-pulse' : 'bg-emerald-500') : 'bg-slate-400'}`} />
+                            </div>
+                            <p className={`mt-2 font-bold text-sm ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>{ag.name}</p>
+                            <p className={`mt-1.5 leading-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{metadata.desc}</p>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => toggleAgent(ag.id, !!ag.enabled)}
+                            className={`mt-4 rounded-xl px-4 py-1.5 text-[10px] font-bold uppercase border transition w-full ${ag.enabled ? (theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-slate-200 border-slate-300 text-slate-650 hover:bg-slate-300') : (theme === 'dark' ? 'bg-lime-400 border-transparent text-slate-950 hover:bg-lime-300' : 'bg-emerald-500 border-transparent text-white hover:bg-emerald-600')}`}
+                          >
+                            {ag.enabled ? 'Enabled' : 'Deploy Plugin'}
+                          </button>
+                        </div>
+                      );
+                    })}
                 </div>
               </section>
             )}

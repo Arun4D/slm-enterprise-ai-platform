@@ -1,0 +1,21 @@
+{
+  "name": "terraform_agent",
+  "version": "1.0.0",
+  "description": "Validates Terraform plans and plan files against guardrails, secure setups, and cost restrictions",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "TerraformAgent",
+  "capabilities": [
+    "validate_tf_plans",
+    "detect_tf_anomalies",
+    "enforce_guardrails",
+    "generate_secure_hcl",
+    "validate_uploaded_hcl",
+    "validate_pasted_hcl"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read"
+  ],
+  "min_llm_version": "phi-3-mini-gguf"
+}

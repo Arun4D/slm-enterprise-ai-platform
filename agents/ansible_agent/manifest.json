@@ -1,0 +1,21 @@
+{
+  "name": "ansible_agent",
+  "version": "1.0.0",
+  "description": "Validates Ansible Playbooks, syntax errors, and reviews dry-run target connectivity",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "AnsibleAgent",
+  "capabilities": [
+    "validate_playbooks",
+    "dry_run_checks",
+    "node_ping_status",
+    "generate_idempotent_playbooks",
+    "validate_uploaded_playbooks",
+    "validate_pasted_playbooks"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read"
+  ],
+  "min_llm_version": "phi-3-mini-gguf"
+}

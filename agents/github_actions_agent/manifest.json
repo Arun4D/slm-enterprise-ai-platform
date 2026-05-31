@@ -1,0 +1,23 @@
+{
+  "name": "github_actions_agent",
+  "version": "1.0.0",
+  "description": "Analyzes CI/CD pipeline logs and failed runner workflows to suggest pipeline repairs",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "GitHubActionsAgent",
+  "capabilities": [
+    "analyze_workflows",
+    "parse_github_logs",
+    "runner_check",
+    "suggest_pipeline_repairs",
+    "generate_secure_workflows",
+    "validate_uploaded_workflow_code",
+    "validate_pasted_workflow_code"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read",
+    "fs:scan"
+  ],
+  "min_llm_version": "phi-3-mini-gguf"
+}
