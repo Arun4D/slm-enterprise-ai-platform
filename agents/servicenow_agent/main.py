@@ -28,7 +28,32 @@ class ServiceNowAgent(IAgent):
         self.name = "servicenow_agent"
         self.version = "1.0.0"
         self._slm_service: "SLMService | None" = None
-        self._client = ServiceNowClient(offline=True)
+        
+        # Load configurations
+        import yaml
+        from pathlib import Path
+        config_path = Path(__file__).parent / "config.yaml"
+        try:
+            with open(config_path, "r") as f:
+                config = yaml.safe_load(f) or {}
+        except Exception:
+            config = {}
+            
+        api_config = config.get("api", {})
+        auth_type = api_config.get("auth_type", "basic")
+        username = api_config.get("username", "admin_ops_ai")
+        password = api_config.get("password", "secure_password")
+        domain = api_config.get("domain", "CORP")
+        ntlm_token = api_config.get("ntlm_token", "NTLMSSP...")
+        
+        self._client = ServiceNowClient(
+            offline=api_config.get("offline_mode", True),
+            auth_type=auth_type,
+            username=username,
+            password=password,
+            domain=domain,
+            ntlm_token=ntlm_token
+        )
 
     def set_slm_service(self, service: "SLMService") -> None:
         """Receive the platform-injected SLM Service."""

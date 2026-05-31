@@ -1,0 +1,18 @@
+{
+  "name": "nutanix_agent",
+  "version": "1.0.0",
+  "description": "Reviews Nutanix HCI clusters, storage pools, block awareness, and hypervisor allocations",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "NutanixAgent",
+  "capabilities": [
+    "nutanix_cluster_scan",
+    "storage_pool_utilization",
+    "block_awareness_audit"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read"
+  ],
+  "min_llm_version": "7b"
+}

@@ -6,6 +6,10 @@ version: 1.0.0
 api:
   instance_url: "https://mock-company.service-now.com"
   username: "admin_ops_ai"
+  password: "secure_password"
+  auth_type: "basic" # Options: basic, windows
+  domain: "CORP"
+  ntlm_token: "NTLMSSP-TOKEN-MOCK-HASH"
   timeout_seconds: 15
   offline_mode: true
 

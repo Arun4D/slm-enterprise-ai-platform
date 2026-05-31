@@ -1,0 +1,9 @@
+name: monitoring_agent
+version: 1.0.0
+thresholds:
+  cpu_critical_percent: 90
+  memory_critical_percent: 95
+  disk_critical_percent: 85
+anomaly_detection:
+  enabled: true
+  window_minutes: 60

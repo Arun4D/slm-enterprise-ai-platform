@@ -1,0 +1,11 @@
+name: nutanix_agent
+version: 1.0.0
+api:
+  prism_central_url: "https://prism.local"
+  username: "admin_nutanix@local"
+  password: "nutanix_default_password"
+clusters:
+  - "hci-cluster-01.local"
+limits:
+  storage_pool_critical_percent: 80.0
+  resiliency_factor: 2

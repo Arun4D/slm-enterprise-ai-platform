@@ -1,0 +1,12 @@
+name: vmware_agent
+version: 1.0.0
+api:
+  vcenter_url: "https://vcenter.local"
+  username: "administrator@vsphere.local"
+  password: "vmware_default_password"
+esxi_hosts:
+  - "esxi-node-01.local"
+  - "esxi-node-02.local"
+limits:
+  overcommit_ratio_vcpu: 4.0
+  datastores_critical_percent: 85.0

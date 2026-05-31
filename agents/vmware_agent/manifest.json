@@ -1,0 +1,18 @@
+{
+  "name": "vmware_agent",
+  "version": "1.0.0",
+  "description": "Reviews VMware ESXi hypervisor datastores, thick/thin provisioning, and detects CPU/RAM overallocations",
+  "author": "AI Platform Team",
+  "entry_point": "main.py",
+  "agent_class": "VMwareAgent",
+  "capabilities": [
+    "vmware_inventory_scan",
+    "vmware_datastore_utilization",
+    "vmware_allocation_audit"
+  ],
+  "requires_approval": false,
+  "permission_scope": [
+    "file:read"
+  ],
+  "min_llm_version": "7b"
+}

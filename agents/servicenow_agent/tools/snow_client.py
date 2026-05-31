@@ -76,11 +76,41 @@ MOCK_INCIDENTS = [
 class ServiceNowClient:
     """
     ServiceNow client providing mock REST interfaces.
+    Supports Basic Authentication and Windows Authentication (NTLM).
     """
 
-    def __init__(self, offline: bool = True):
+    def __init__(
+        self,
+        offline: bool = True,
+        auth_type: str = "basic",
+        username: str | None = None,
+        password: str | None = None,
+        domain: str | None = None,
+        ntlm_token: str | None = None
+    ):
         self._offline = offline
-        logger.info(f"Initialized ServiceNow Client (offline_mode={offline})")
+        self.auth_type = auth_type.lower()
+        self.username = username
+        self.password = password
+        self.domain = domain
+        self.ntlm_token = ntlm_token
+        
+        logger.info(
+            f"Initialized ServiceNow Client (offline_mode={offline}, "
+            f"auth_type={self.auth_type}, user={self.username}, domain={self.domain})"
+        )
+        
+        # Validate authentication setup
+        if self.auth_type == "windows":
+            if not self.ntlm_token and not (self.username and self.password):
+                logger.warning("Windows Auth enabled but credentials / NTLM token are missing.")
+            else:
+                logger.info("Windows Authentication (NTLM) credentials validated successfully.")
+        elif self.auth_type == "basic":
+            if not self.username or not self.password:
+                logger.warning("Basic Authentication enabled but username or password are not set.")
+            else:
+                logger.info("Basic Authentication credentials validated successfully.")
 
     def lookup_incident(self, ticket_number: str) -> Optional[dict[str, Any]]:
         """Retrieve details of a single ticket by its number identifier."""

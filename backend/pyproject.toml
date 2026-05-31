@@ -34,6 +34,7 @@ local-slm = [
     "llama-cpp-python>=0.2.50",
 ]
 dev = [
+    "slm-enterprise-ai-platform[local-slm]",
     "black>=24.1.1",
     "ruff>=0.2.1",
     "mypy>=1.8.0",

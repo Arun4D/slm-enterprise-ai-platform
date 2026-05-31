@@ -6,6 +6,7 @@ Follows 12-factor app principles for enterprise deployments.
 """
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Literal
 
@@ -57,12 +58,13 @@ class Settings(BaseSettings):
     plugin_auto_discovery: bool = True
     plugin_allowed_paths: list[str] = [str(ROOT_PATH / "agents"), str(ROOT_PATH / "plugins")]
     plugin_trusted_sources: str = "internal"
-    runtime_workspace_path: str = "/tmp/slm-enterprise-ai-platform"
+    runtime_workspace_path: str = str(Path(tempfile.gettempdir()) / "slm-enterprise-ai-platform")
     file_allowed_paths: list[str] = [
         str(ROOT_PATH / "agents"),
         str(ROOT_PATH / "plugins"),
-        "/tmp/slm-enterprise-ai-platform",
-        "/home/arun/Workspace",
+        str(Path(tempfile.gettempdir()) / "slm-enterprise-ai-platform"),
+        str(Path.home() / "Workspace"),
+        str(ROOT_PATH),
     ]
 
     # Audit
