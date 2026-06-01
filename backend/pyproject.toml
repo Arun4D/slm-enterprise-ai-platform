@@ -34,12 +34,14 @@ local-slm = [
     "llama-cpp-python>=0.2.50",
 ]
 dev = [
-    "slm-enterprise-ai-platform[local-slm]",
     "black>=24.1.1",
     "ruff>=0.2.1",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
     "pytest-mock>=3.13.0",
+]
+dev-local-slm = [
+    "slm-enterprise-ai-platform[dev,local-slm]",
 ]
 
 [tool.setuptools.packages.find]

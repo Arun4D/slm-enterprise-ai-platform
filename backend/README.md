@@ -94,6 +94,25 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
+`llama-cpp-python` is intentionally not installed by the `dev` extra because it may
+compile native C++ code on Windows and fail with CMake errors when a compatible
+wheel or compiler toolchain is unavailable.
+
+For local GGUF inference, install it explicitly after the backend is working:
+
+```powershell
+# Windows PowerShell
+pip install --only-binary=:all: llama-cpp-python
+```
+
+If pip cannot find a wheel for your Python/Windows combination, use Python
+3.10-3.12 x64 or install Visual Studio Build Tools with the C++ workload and
+CMake, then run:
+
+```powershell
+pip install -e ".[dev-local-slm]"
+```
+
 ### Environment Configuration
 
 ```bash
