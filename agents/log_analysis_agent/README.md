@@ -79,7 +79,7 @@ Generates a human-readable markdown summary of results.
 ### Via API
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/agents/log_analysis_agent/execute \
+curl -X POST http://localhost:8001/api/v1/agents/log_analysis_agent/execute \
   -H "Content-Type: application/json" \
   -d '{
     "agent_id": "log_analysis_agent",

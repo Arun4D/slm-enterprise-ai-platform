@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     cors_origins: list[str] | str = [
         "http://localhost:3000",
-        "http://localhost:8000",
+        "http://localhost:8001",
         "http://localhost:4173",
     ]
 

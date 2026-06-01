@@ -123,7 +123,7 @@ source venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-Visit: http://localhost:8000/docs
+Visit: http://localhost:8001/docs
 
 ### API Endpoints
 
@@ -254,7 +254,7 @@ Audit Log + Response
 
 ```bash
 # Execute log analysis agent
-curl -X POST http://localhost:8000/api/v1/agents/log_analysis_agent/execute \
+curl -X POST http://localhost:8001/api/v1/agents/log_analysis_agent/execute \
   -H "Content-Type: application/json" \
   -d '{
     "agent_id": "log_analysis_agent",
@@ -351,7 +351,7 @@ mypy app/                  # Type check
 | [QUICK_START.md](QUICK_START.md) | Commands, workflows, troubleshooting |
 | [backend/README.md](backend/README.md) | Setup, API, security details |
 | [agents/.../README.md](agents/log_analysis_agent/README.md) | Agent development |
-| API Docs | http://localhost:8000/docs (auto-generated) |
+| API Docs | http://localhost:8001/docs (auto-generated) |
 
 ---
 

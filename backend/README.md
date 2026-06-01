@@ -124,10 +124,10 @@ cp .env.example .env
 
 ```bash
 # Development with auto-reload
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 # Production
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
 ### Running Tests
@@ -309,7 +309,7 @@ COPY pyproject.toml .
 RUN pip install -e .
 
 COPY app app/
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
 ```
 
 ### Kubernetes

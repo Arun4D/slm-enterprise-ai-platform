@@ -151,7 +151,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 uvicorn app.main:app --reload
 
 # Visit API documentation
-# http://localhost:8000/docs
+# http://localhost:8001/docs
 ```
 
 ### Key Configuration Files
@@ -272,7 +272,7 @@ Coverage report available at `htmlcov/index.html`
 - **Backend README**: `backend/README.md` - Setup, API, security details
 - **Architecture Guide**: `ARCHITECTURE.md` - Design patterns, future roadmap
 - **Log Agent Guide**: `agents/log_analysis_agent/README.md` - Usage, configuration
-- **API Documentation**: http://localhost:8000/docs (interactive Swagger)
+- **API Documentation**: http://localhost:8001/docs (interactive Swagger)
 
 ## 🔄 Development Workflow
 

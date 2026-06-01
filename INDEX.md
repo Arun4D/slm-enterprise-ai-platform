@@ -73,7 +73,7 @@ slm-enterprise-ai-platform/          (Project root)
 **Get Started**
 - [5-minute setup guide](QUICK_START.md#🚀-start-development-in-5-minutes)
 - [Run the application](QUICK_START.md#common-commands)
-- [View API docs](http://localhost:8000/docs) (after starting server)
+- [View API docs](http://localhost:8001/docs) (after starting server)
 
 **Understand the Architecture**
 - [Architecture overview](ARCHITECTURE.md#component-architecture)

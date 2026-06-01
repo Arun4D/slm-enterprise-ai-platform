@@ -9,7 +9,7 @@ source venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-Visit: http://localhost:8000/docs
+Visit: http://localhost:8001/docs
 
 ## 📁 Where to Find Things
 
@@ -58,7 +58,7 @@ pytest tests/test_security.py::test_path_validator_rejects_traversal -v
 uvicorn app.main:app --reload
 
 # Production (4 workers)
-uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8000
+uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8001
 ```
 
 ## 🏗️ Create New Agent (Step-by-Step)
@@ -176,17 +176,17 @@ log_audit_event(
 
 ### List Agents
 ```bash
-curl http://localhost:8000/api/v1/agents
+curl http://localhost:8001/api/v1/agents
 ```
 
 ### Get Agent Details
 ```bash
-curl http://localhost:8000/api/v1/agents/log_analysis_agent
+curl http://localhost:8001/api/v1/agents/log_analysis_agent
 ```
 
 ### Execute Agent
 ```bash
-curl -X POST http://localhost:8000/api/v1/agents/log_analysis_agent/execute \
+curl -X POST http://localhost:8001/api/v1/agents/log_analysis_agent/execute \
   -H "Content-Type: application/json" \
   -d '{
     "agent_id": "log_analysis_agent",
@@ -198,12 +198,12 @@ curl -X POST http://localhost:8000/api/v1/agents/log_analysis_agent/execute \
 
 ### Health Check
 ```bash
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8001/api/v1/health
 ```
 
 ### Interactive API Docs
 ```
-http://localhost:8000/docs
+http://localhost:8001/docs
 ```
 
 ## 🐛 Troubleshooting

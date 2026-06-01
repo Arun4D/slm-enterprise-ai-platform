@@ -194,10 +194,10 @@ uvicorn app.main:app --reload
 ### Verify Installation
 ```bash
 # Test API
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8001/api/v1/health
 
 # View interactive docs
-# Open: http://localhost:8000/docs
+# Open: http://localhost:8001/docs
 ```
 
 ---
@@ -383,7 +383,7 @@ slm-enterprise-ai-platform/
 | Quick Start | Common tasks, commands | `QUICK_START.md` |
 | Agent Development | Creating new agents | `agents/log_analysis_agent/README.md` |
 | Phase 1 Summary | Deliverables, metrics | `PHASE_1_COMPLETE.md` |
-| API Docs | Interactive endpoint reference | `http://localhost:8000/docs` |
+| API Docs | Interactive endpoint reference | `http://localhost:8001/docs` |
 
 ---
 
