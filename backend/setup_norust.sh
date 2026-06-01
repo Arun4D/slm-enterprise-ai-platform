@@ -71,8 +71,8 @@ pip install $PROXY_FLAG --only-binary :all: -e .
 
 # Create the environment configuration file if not exists
 if [ ! -f ".env" ]; then
-    echo "⚙️  Creating .env configuration file from template..."
-    cp .env.example .env
+    echo "⚙️  Creating .env configuration file from Linux template..."
+    cp .env.linux.example .env
     
     # Update SQLite path and make SLM optional/disabled by default locally if they don't have local weights yet
     # Phi-3 Mini path is kept as default but it won't load if not present, falling back to deterministic mode.

@@ -59,7 +59,8 @@ async def lifespan(app: FastAPI):  # type: ignore
         logger.warning(
             "SLM service unavailable — agents will use deterministic fallbacks. "
             f"Reason: {slm_engine.load_error or 'model not found'}. "
-            f"Path: {settings.slm_model_path}"
+            f"Configured path: {settings.slm_model_path}. "
+            f"Resolved path: {slm_engine.resolved_model_path}"
         )
     
     # Initialize services

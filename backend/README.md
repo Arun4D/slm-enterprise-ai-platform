@@ -73,7 +73,9 @@ backend/
 │   ├── test_plugin_manager.py
 │   ├── test_security.py
 │   └── ...
-├── .env.example               # Environment template
+├── .env.example               # Generic environment template
+├── .env.linux.example         # Linux/macOS development template
+├── .env.windows.example       # Windows development template
 ├── pyproject.toml             # Dependencies & config
 └── README.md
 ```
@@ -116,7 +118,14 @@ pip install -e ".[dev-local-slm]"
 ### Environment Configuration
 
 ```bash
-cp .env.example .env
+cp .env.linux.example .env
+# Edit .env with your settings
+```
+
+On Windows:
+
+```powershell
+Copy-Item .env.windows.example .env
 # Edit .env with your settings
 ```
 
@@ -255,6 +264,17 @@ PLUGIN_ALLOWED_PATHS=["/agents","/plugins"]
 # Agent Constraints
 AGENT_EXECUTION_TIMEOUT_SECONDS=300
 ```
+
+On Windows, prefer forward slashes or escaped backslashes in `.env`:
+
+```powershell
+SLM_MODEL_PATH=C:/arun/workspace/phi-3-mini-gguf/model.gguf
+# or
+SLM_MODEL_PATH=C:\\arun\\workspace\\phi-3-mini-gguf\\model.gguf
+```
+
+You can also point `SLM_MODEL_PATH` at the model directory; the backend will
+look for `model.gguf` inside it.
 
 ## Error Handling
 

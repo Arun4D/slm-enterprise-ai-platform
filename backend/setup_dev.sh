@@ -39,8 +39,8 @@ pre-commit install 2>/dev/null || true
 
 # Create .env if not exists
 if [ ! -f ".env" ]; then
-    echo "⚙️  Creating .env file from template..."
-    cp .env.example .env
+    echo "⚙️  Creating .env file from Linux template..."
+    cp .env.linux.example .env
 fi
 
 echo ""

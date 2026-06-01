@@ -64,6 +64,7 @@ class SLMEngine:
         self._model_loaded = False
         self._load_failed = False
         self._load_error: str | None = None
+        self._resolved_model_path: Path | None = None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="slm-")
 
     # ------------------------------------------------------------------
@@ -91,6 +92,11 @@ class SLMEngine:
     def load_error(self) -> str | None:
         """Error message if model loading failed."""
         return self._load_error
+
+    @property
+    def resolved_model_path(self) -> str:
+        """Resolved model path used for file existence checks."""
+        return str(self._resolved_model_path or self._normalize_model_path(self._model_path))
 
     def generate(
         self,
@@ -186,10 +192,14 @@ class SLMEngine:
             self._load_error = "llama-cpp-python not installed"
             return False
 
-        model_path = Path(self._model_path)
+        model_path = self._normalize_model_path(self._model_path)
+        self._resolved_model_path = model_path
         if not model_path.exists():
             self._load_failed = True
-            self._load_error = f"Model not found: {self._model_path}"
+            self._load_error = (
+                f"Model not found. Requested path: {self._model_path}. "
+                f"Resolved path: {model_path}"
+            )
             logger.warning(self._load_error)
             return False
 
@@ -261,3 +271,18 @@ class SLMEngine:
             self._model = None
             self._model_loaded = False
         logger.info("SLM engine shut down")
+
+    @staticmethod
+    def _normalize_model_path(model_path: str) -> Path:
+        """
+        Normalize operator-provided model paths.
+
+        Windows .env files often contain mixed separators, surrounding quotes,
+        or parent directory segments. If a directory is provided, assume the
+        standard GGUF filename inside it.
+        """
+        normalized = os.path.expandvars(model_path.strip().strip("\"'"))
+        path = Path(normalized).expanduser().resolve(strict=False)
+        if path.exists() and path.is_dir():
+            return path / "model.gguf"
+        return path

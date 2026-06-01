@@ -55,8 +55,8 @@ Write-Host "   (This prevents pip from attempting to compile packages like pydan
 
 # 6. Create the environment configuration file if it does not exist
 if (-not (Test-Path ".env")) {
-    Write-Host "⚙️ Creating .env configuration file from template..." -ForegroundColor Yellow
-    Copy-Item -Path ".env.example" -Destination ".env"
+    Write-Host "⚙️ Creating .env configuration file from Windows template..." -ForegroundColor Yellow
+    Copy-Item -Path ".env.windows.example" -Destination ".env"
 }
 
 # 7. Ask to download local SLM GGUF Model weights
