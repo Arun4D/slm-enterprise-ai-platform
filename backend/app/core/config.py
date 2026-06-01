@@ -6,12 +6,13 @@ Follows 12-factor app principles for enterprise deployments.
 """
 
 import logging
+import json
 import tempfile
 from pathlib import Path
 from typing import Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_PATH = Path(__file__).resolve().parents[3]
 
@@ -28,7 +29,11 @@ class Settings(BaseSettings):
     debug: bool = False
     app_name: str = "SLM Enterprise AI Platform"
     app_version: str = "0.1.0"
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000", "http://localhost:4173"]
+    cors_origins: list[str] | str = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://localhost:4173",
+    ]
 
     # SLM Model Configuration
     slm_enabled: bool = True  # Master toggle for SLM features
@@ -56,10 +61,14 @@ class Settings(BaseSettings):
 
     # Plugin System
     plugin_auto_discovery: bool = True
-    plugin_allowed_paths: list[str] = [str(ROOT_PATH / "agents"), str(ROOT_PATH / "plugins")]
+    plugin_allowed_paths: list[str] | str = [
+        str(ROOT_PATH / "agents"),
+        str(ROOT_PATH / "plugins"),
+    ]
     plugin_trusted_sources: str = "internal"
     runtime_workspace_path: str = str(Path(tempfile.gettempdir()) / "slm-enterprise-ai-platform")
-    file_allowed_paths: list[str] = [
+    extra_allowed_paths: list[str] | str = []
+    file_allowed_paths: list[str] | str = [
         str(ROOT_PATH / "agents"),
         str(ROOT_PATH / "plugins"),
         str(Path(tempfile.gettempdir()) / "slm-enterprise-ai-platform"),
@@ -87,9 +96,29 @@ class Settings(BaseSettings):
                 return True
         return value
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    @field_validator("extra_allowed_paths", "file_allowed_paths", "plugin_allowed_paths", "cors_origins", mode="before")
+    @classmethod
+    def parse_list_setting(cls, value: object) -> object:
+        """Accept JSON arrays or comma-separated strings in .env files."""
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized.startswith("["):
+                return json.loads(normalized)
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+
+    @property
+    def resolved_file_allowed_paths(self) -> list[str]:
+        """Base allowlist plus operator-provided extra paths."""
+        return [*self._as_list(self.file_allowed_paths), *self._as_list(self.extra_allowed_paths)]
+
+    @staticmethod
+    def _as_list(value: list[str] | str) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
 
 # Global settings instance
