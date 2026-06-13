@@ -17,5 +17,5 @@
   "permission_scope": [
     "file:read"
   ],
-  "min_llm_version": "phi-3-mini-gguf"
+  "min_llm_version": "qwen2.5-1.5b-instruct-gguf"
 }

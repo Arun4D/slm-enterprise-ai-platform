@@ -62,8 +62,8 @@ if (-not (Test-Path ".env")) {
 # 7. Ask to download local SLM GGUF Model weights
 Write-Host "=================================================================" -ForegroundColor Cyan
 $title = "Local SLM GGUF Model Setup"
-$message = "Do you want to download Microsoft's Phi-3-Mini GGUF model (approx. 2.2 GB)?"
-$yes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Downloads the 2.2GB Microsoft Phi-3-Mini model to enable full offline AI orchestration."
+$message = "Do you want to download Qwen's Qwen2.5-1.5B GGUF model (approx. 1.2 GB)?"
+$yes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Downloads the 1.2GB Qwen 1.5B model to enable full offline AI orchestration."
 $no = New-Object System.Management.Automation.Host.ChoiceDescription "&No", "Skips model download. The platform will degrade gracefully to local SRE deterministic fallback rules."
 $options = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
 $result = $host.ui.PromptForChoice($title, $message, $options, 1) # Default is No

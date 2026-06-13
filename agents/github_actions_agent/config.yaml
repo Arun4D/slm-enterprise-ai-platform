@@ -28,5 +28,5 @@ generation:
   default_templates:
     - node_ci
     - python_ci
-  orchestrator_model: phi-3-mini-gguf
+  orchestrator_model: qwen2.5-1.5b-instruct-gguf
   slm_execution_policy: route_plan_summarize_only

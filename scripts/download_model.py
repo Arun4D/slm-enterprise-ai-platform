@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Automated downloader for SLM GGUF models.
-Downloads Microsoft's Phi-3-Mini 4k Instruct Q4 GGUF from Hugging Face.
+Downloads Qwen's Qwen2.5-1.5B-Instruct-GGUF (Q4_K_M) from Hugging Face.
 """
 
 import os
@@ -10,8 +10,8 @@ import urllib.request
 from pathlib import Path
 
 # Approved GGUF model details
-DEFAULT_MODEL_URL = "https://huggingface.co/Microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
-DEFAULT_DEST_PATH = Path(__file__).parent.parent / "backend" / "models" / "phi-3-mini-gguf" / "model.gguf"
+DEFAULT_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+DEFAULT_DEST_PATH = Path(__file__).parent.parent / "backend" / "models" / "qwen2.5-1.5b-instruct-gguf" / "model.gguf"
 
 
 def format_size(size_bytes: int) -> str:
@@ -47,17 +47,17 @@ def download_model(url: str = DEFAULT_MODEL_URL, dest: Path = DEFAULT_DEST_PATH)
     print(f"Target Destination: {dest.resolve()}")
     
     if dest.exists():
-        # Check size to see if it's already downloaded (Phi-3 Mini Q4 GGUF is approx 2.2GB / 2393325760 bytes)
+        # Check size to see if it's already downloaded (Qwen 1.5B GGUF is approx 1.13 GB)
         current_size = dest.stat().st_size
         print(f"File already exists with size: {format_size(current_size)}")
-        if current_size > 2 * 1024 * 1024 * 1024:  # > 2GB
+        if current_size > 1 * 1024 * 1024 * 1024:  # > 1GB
             print("Model appears to be fully downloaded. Skipping download.")
             return True
         else:
             print("File exists but size seems small/incomplete. Redownloading...")
 
     print(f"Source URL: {url}")
-    print("This will download a ~2.2 GB model. Please make sure you have enough disk space and a stable network connection.")
+    print("This will download a ~1.2 GB model. Please make sure you have enough disk space and a stable network connection.")
     
     try:
         # Request headers to bypass potential user-agent blocks

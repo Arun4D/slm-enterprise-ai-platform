@@ -75,7 +75,7 @@ if [ ! -f ".env" ]; then
     cp .env.linux.example .env
     
     # Update SQLite path and make SLM optional/disabled by default locally if they don't have local weights yet
-    # Phi-3 Mini path is kept as default but it won't load if not present, falling back to deterministic mode.
+    # Qwen 1.5B path is kept as default but it won't load if not present, falling back to deterministic mode.
 fi
 
 echo "================================================================="

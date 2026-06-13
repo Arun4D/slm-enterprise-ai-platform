@@ -530,7 +530,25 @@ function App() {
 
     try {
       // 1. File Upload specialized trigger for logs and code/config validation
-      if (fileEnabledAgents.has(selectedAgent) && attachments.length > 0) {
+      let uploadAgent = selectedAgent;
+      if (uploadAgent === 'auto' && attachments.length > 0) {
+        const fileNames = attachments.map(f => f.name.toLowerCase());
+        const hasTf = fileNames.some(name => name.endsWith('.tf') || name.endsWith('.hcl') || name.includes('tfplan'));
+        const hasGithub = fileNames.some(name => name.includes('workflow') || name.includes('action') || name.includes('github') || name.includes('.github'));
+        const hasAnsible = fileNames.some(name => name.includes('playbook') || name.includes('ansible') || name.endsWith('.yml') || name.endsWith('.yaml'));
+        
+        if (hasTf) {
+          uploadAgent = 'terraform_agent';
+        } else if (hasGithub) {
+          uploadAgent = 'github_actions_agent';
+        } else if (hasAnsible) {
+          uploadAgent = 'ansible_agent';
+        } else {
+          uploadAgent = 'log_analysis_agent';
+        }
+      }
+
+      if (fileEnabledAgents.has(uploadAgent) && attachments.length > 0) {
         const formData = new FormData();
         formData.append('intent', promptText);
         formData.append('session_id', activeSessionId);
@@ -540,7 +558,7 @@ function App() {
           formData.append('files', file, file.name);
         });
 
-        const response = await fetch(`/api/v1/agents/${selectedAgent}/analyze-files`, {
+        const response = await fetch(`/api/v1/agents/${uploadAgent}/analyze-files`, {
           method: 'POST',
           body: formData
         });
@@ -554,7 +572,7 @@ function App() {
           updated[updated.length - 1] = {
             role: 'assistant',
             text: result.summary ?? 'Files processed.',
-            logResult: selectedAgent === 'log_analysis_agent' ? result : undefined
+            logResult: uploadAgent === 'log_analysis_agent' ? result : undefined
           };
           return updated;
         });
@@ -915,7 +933,7 @@ function App() {
 
   return (
     <div className={`min-h-screen font-sans antialiased selection:bg-lime-400 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-950 text-slate-100 selection:text-slate-950' : 'bg-slate-50 text-slate-900 selection:text-white'}`}>
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-screen max-w-full flex-col px-4 py-4 sm:px-6 lg:px-8">
         
         {/* ========================================== HEADER ========================================== */}
         <header className={`mb-4 flex items-center justify-between rounded-3xl border px-6 py-4 shadow-xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/40' : 'border-slate-200/85 bg-white/75'}`}>
@@ -997,7 +1015,7 @@ function App() {
 
             <div className={`mt-4 rounded-2xl border p-3 text-[11px] transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-100/50 text-slate-650'}`}>
               <p className={`font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Local Architecture Validated</p>
-              <p className="mt-1 leading-5">Running offline. Routing requests via internal Python adapters to Microsoft Phi-3.</p>
+              <p className="mt-1 leading-5">Running offline. Routing requests via internal Python adapters to Qwen 1.5B.</p>
             </div>
           </aside>
 
@@ -1678,7 +1696,7 @@ function App() {
                   <div className={`rounded-2xl border p-4 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
                     <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Local GGUF Model settings</p>
                     <div className={`mt-2 space-y-1.5 font-mono text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                      <p>Path: backend/models/phi-3-mini-gguf/model.gguf</p>
+                      <p>Path: backend/models/qwen2.5-1.5b-instruct-gguf/model.gguf</p>
                       <p>Threads limit: 4</p>
                       <p>Context window: 2048 tokens</p>
                       <p>Temperature bias: 0.15</p>

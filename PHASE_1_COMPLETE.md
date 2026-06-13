@@ -158,7 +158,7 @@ uvicorn app.main:app --reload
 
 **`.env` - Application Settings**
 ```
-SLM_MODEL_PATH=/models/phi-3-mini-gguf/model.gguf
+SLM_MODEL_PATH=/models/qwen2.5-1.5b-instruct-gguf/model.gguf
 PLUGIN_ALLOWED_PATHS=["/agents","/plugins"]
 DEBUG=true
 ```

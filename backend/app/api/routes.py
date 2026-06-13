@@ -567,29 +567,37 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     ansible_keywords = ["ansible", "playbook", "inventory", "hosts:", "ansible.builtin", "yaml"]
                     snow_keywords = ["servicenow", "snow", "incident", "ticket", "inc", "rca", "resolution", "client", "close notes", "trends", "user", "db"]
                     log_keywords = ["log", "error", "tomcat", "java", "exception", "warn", "parse", "scan", "evtx", "diagnose"]
+                    monitoring_keywords = ["monitoring", "metric", "cpu", "memory", "usage", "storage", "container", "alert", "virtualization"]
+                    vmware_keywords = ["vmware", "esxi", "vcenter", "vcpu", "datastore", "vmotion", "migration", "ssd", "sata"]
+                    nutanix_keywords = ["nutanix", "hyperconverged", "hci", "prism", "resiliency", "rf2", "rf3", "storage pool"]
                     
                     github_score = sum(1 for kw in github_keywords if kw in normalized_message)
                     terraform_score = sum(1 for kw in terraform_keywords if kw in normalized_message)
                     ansible_score = sum(1 for kw in ansible_keywords if kw in normalized_message)
                     snow_score = sum(1 for kw in snow_keywords if kw in normalized_message)
                     log_score = sum(1 for kw in log_keywords if kw in normalized_message)
+                    monitoring_score = sum(1 for kw in monitoring_keywords if kw in normalized_message)
+                    vmware_score = sum(1 for kw in vmware_keywords if kw in normalized_message)
+                    nutanix_score = sum(1 for kw in nutanix_keywords if kw in normalized_message)
                     
-                    if github_score > 0 and github_score >= max(terraform_score, ansible_score, snow_score, log_score):
-                        target_agent_id = "github_actions_agent"
-                    elif terraform_score > 0 and terraform_score >= max(ansible_score, snow_score, log_score):
-                        target_agent_id = "terraform_agent"
-                    elif ansible_score > 0 and ansible_score >= max(snow_score, log_score):
-                        target_agent_id = "ansible_agent"
-                    elif "servicenow" in normalized_message or "snow" in normalized_message or "incident" in normalized_message or "ticket" in normalized_message or "inc" in normalized_message:
-                        target_agent_id = "servicenow_agent"
-                    elif log_score > snow_score:
-                        target_agent_id = "log_analysis_agent"
-                    elif snow_score > log_score:
-                        target_agent_id = "servicenow_agent"
+                    scores = {
+                        "github_actions_agent": github_score,
+                        "terraform_agent": terraform_score,
+                        "ansible_agent": ansible_score,
+                        "servicenow_agent": snow_score,
+                        "log_analysis_agent": log_score,
+                        "monitoring_agent": monitoring_score,
+                        "vmware_agent": vmware_score,
+                        "nutanix_agent": nutanix_score,
+                    }
+                    
+                    max_agent = max(scores, key=scores.get)
+                    if scores[max_agent] > 0:
+                        target_agent_id = max_agent
                     else:
                         target_agent_id = "log_analysis_agent"
                         
-                    logger.info(f"SLM Service unavailable. Fallback router routed query to: {target_agent_id}")
+                    logger.info(f"SLM Service unavailable. Fallback router routed query to: {target_agent_id} (scores: {scores})")
 
             yield f"data: {json.dumps({'event': 'routing', 'data': f'Routed query to agent: {target_agent_id}'})}\n\n"
             await asyncio.sleep(0.05)
