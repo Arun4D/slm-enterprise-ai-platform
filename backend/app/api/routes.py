@@ -395,7 +395,7 @@ async def tail_log_file(
             patterns = LogAnalyzer.extract_patterns(classified["errors"] + classified["warnings"])
             app_status = LogAnalyzer.detect_application_lifecycle(parsed_entries)
 
-            yield f"data: {json.dumps({
+            init_data = {
                 'event': 'init',
                 'total_lines': len(parsed_entries),
                 'classified': {
@@ -406,7 +406,8 @@ async def tail_log_file(
                 'patterns': patterns,
                 'application_status': app_status,
                 'raw_lines': [e['raw'] for e in parsed_entries[-40:]]
-            })}\n\n"
+            }
+            yield f"data: {json.dumps(init_data)}\n\n"
             await asyncio.sleep(0.1)
 
         except Exception as e:
@@ -436,7 +437,7 @@ async def tail_log_file(
                                 patterns = LogAnalyzer.extract_patterns(classified["errors"] + classified["warnings"])
                                 app_status = LogAnalyzer.detect_application_lifecycle(parsed_entries)
 
-                                yield f"data: {json.dumps({
+                                update_data = {
                                     'event': 'update',
                                     'total_lines': len(parsed_entries),
                                     'classified': {
@@ -447,7 +448,8 @@ async def tail_log_file(
                                     'patterns': patterns,
                                     'application_status': app_status,
                                     'raw_lines': [e['raw'] for e in new_entries]
-                                })}\n\n"
+                                }
+                                yield f"data: {json.dumps(update_data)}\n\n"
 
                 await asyncio.sleep(0.5)
 
@@ -599,7 +601,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                         
                     logger.info(f"SLM Service unavailable. Fallback router routed query to: {target_agent_id} (scores: {scores})")
 
-            yield f"data: {json.dumps({'event': 'routing', 'data': f'Routed query to agent: {target_agent_id}'})}\n\n"
+            yield f"data: {json.dumps({'event': 'routing', 'data': 'Routed query to agent: ' + target_agent_id})}\n\n"
             await asyncio.sleep(0.05)
 
             # Retrieve concrete agent entry
@@ -610,12 +612,12 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 target_agent_id = "log_analysis_agent"
                 agent_entry = agent_registry.get_agent(target_agent_id)
                 agent_instance = agent_entry["plugin"]["agent"]
-                yield f"data: {json.dumps({'event': 'routing', 'data': f'Fallback routed to: {target_agent_id}'})}\n\n"
+                yield f"data: {json.dumps({'event': 'routing', 'data': 'Fallback routed to: ' + target_agent_id})}\n\n"
 
             agent_name = agent_entry["metadata"].name
 
             # 2. TASK DECOMPOSITION & PLANNING
-            yield f"data: {json.dumps({'event': 'planning', 'data': f'Initializing agent planning layer for {agent_name}...'})}\n\n"
+            yield f"data: {json.dumps({'event': 'planning', 'data': 'Initializing agent planning layer for ' + agent_name + '...'})}\n\n"
             await asyncio.sleep(0.05)
 
             session_messages = repo.get_session_messages(session_id)
@@ -667,7 +669,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
         except Exception as exc:
             logger.error(f"Error in SSE conversational stream: {exc}")
-            yield f"data: {json.dumps({'event': 'error', 'data': f'Execution error: {str(exc)}'})}\n\n"
+            yield f"data: {json.dumps({'event': 'error', 'data': 'Execution error: ' + str(exc)})}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
