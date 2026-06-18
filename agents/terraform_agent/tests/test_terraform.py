@@ -79,6 +79,22 @@ def test_generate_hcl_custom_azure_vnet():
     assert 'Owner       = "AzureTeam"' in code
 
 
+def test_generate_hcl_azure_hub_spoke():
+    """Test generating Azure HCL hub and spoke peering resources."""
+    params = {
+        "provider": "azure",
+        "environment": "staging",
+        "owner": "NetworkOps"
+    }
+    code = TerraformAuditor.generate_hcl("create azure hub and spoke model", params)
+    assert 'resource "azurerm_resource_group" "rg"' in code
+    assert 'name     = "rg-hub-spoke-staging"' in code
+    assert 'resource "azurerm_virtual_network" "hub"' in code
+    assert 'resource "azurerm_virtual_network" "spoke"' in code
+    assert 'resource "azurerm_virtual_network_peering" "hub_to_spoke"' in code
+    assert 'resource "azurerm_virtual_network_peering" "spoke_to_hub"' in code
+
+
 # ===========================================================================
 # Agent Integration Tests
 # ===========================================================================

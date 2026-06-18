@@ -142,7 +142,56 @@ class TerraformAuditor:
         res_type = params.get("resource_type") or ("vpc" if any(kw in query.lower() for kw in ["vpc", "network", "vnet", "virtual network"]) else "instance")
         
         if provider == "azure":
-            if res_type == "vpc":
+            is_hub_spoke = "hub" in query.lower() and "spoke" in query.lower()
+            if is_hub_spoke:
+                return (
+                    f"resource \"azurerm_resource_group\" \"rg\" {{\n"
+                    f"  name     = \"rg-hub-spoke-{env.lower()}\"\n"
+                    f"  location = \"eastus2\"\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_virtual_network\" \"hub\" {{\n"
+                    f"  name                = \"vnet-hub\"\n"
+                    f"  address_space       = [\"10.0.0.0/16\"]\n"
+                    f"  location            = azurerm_resource_group.rg.location\n"
+                    f"  resource_group_name = azurerm_resource_group.rg.name\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_virtual_network\" \"spoke\" {{\n"
+                    f"  name                = \"vnet-spoke\"\n"
+                    f"  address_space       = [\"10.1.0.0/16\"]\n"
+                    f"  location            = azurerm_resource_group.rg.location\n"
+                    f"  resource_group_name = azurerm_resource_group.rg.name\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_virtual_network_peering\" \"hub_to_spoke\" {{\n"
+                    f"  name                         = \"peer-hub-to-spoke\"\n"
+                    f"  resource_group_name          = azurerm_resource_group.rg.name\n"
+                    f"  virtual_network_name         = azurerm_virtual_network.hub.name\n"
+                    f"  remote_virtual_network_id    = azurerm_virtual_network.spoke.id\n"
+                    f"  allow_virtual_network_access = true\n"
+                    f"  allow_forwarded_traffic      = true\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_virtual_network_peering\" \"spoke_to_hub\" {{\n"
+                    f"  name                         = \"peer-spoke-to-hub\"\n"
+                    f"  resource_group_name          = azurerm_resource_group.rg.name\n"
+                    f"  virtual_network_name         = azurerm_virtual_network.spoke.name\n"
+                    f"  remote_virtual_network_id    = azurerm_virtual_network.hub.id\n"
+                    f"  allow_virtual_network_access = true\n"
+                    f"  allow_forwarded_traffic      = true\n"
+                    f"}}\n"
+                )
+            elif res_type == "vpc":
                 cidr = params.get("cidr_block") or "10.0.0.0/16"
                 return (
                     f"resource \"azurerm_resource_group\" \"rg\" {{\n"

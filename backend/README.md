@@ -135,6 +135,8 @@ Copy-Item .env.windows.example .env
 # Development with auto-reload
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
+uvicorn app.main:app --reload --reload-dir app --reload-dir ../agents --host 127.0.0.1 --port 8001
+
 # Production
 uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 4
 ```
