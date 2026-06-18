@@ -119,65 +119,142 @@ class TerraformAuditor:
             params = {}
             
         # Extract environment
-        env = params.get("environment") or "Production"
-        # Capitalize environment for tagging
-        env = env.strip().capitalize() if env else "Production"
+        env_raw = params.get("environment") or "Production"
+        env_map = {
+            "dev": "Development",
+            "prod": "Production",
+            "staging": "Staging",
+            "testing": "Testing",
+            "development": "Development",
+            "production": "Production"
+        }
+        env = env_map.get(env_raw.lower().strip(), env_raw.strip().capitalize())
         
         # Extract owner
         owner = params.get("owner") or "Platform_Ops"
         owner = owner.strip()
         
+        # Extract provider (aws or azure)
+        provider = params.get("provider") or ("azure" if any(kw in query.lower() for kw in ["azure", "azurerm"]) else "aws")
+        provider = provider.strip().lower()
+
         # Extract resource type
-        res_type = params.get("resource_type") or ("vpc" if any(kw in query.lower() for kw in ["vpc", "network"]) else "instance")
+        res_type = params.get("resource_type") or ("vpc" if any(kw in query.lower() for kw in ["vpc", "network", "vnet", "virtual network"]) else "instance")
         
-        if res_type == "vpc":
-            cidr = params.get("cidr_block") or "10.0.0.0/16"
-            return (
-                f"resource \"aws_vpc\" \"main\" {{\n"
-                f"  cidr_block           = \"{cidr}\"\n"
-                f"  enable_dns_support   = true\n"
-                f"  enable_dns_hostnames = true\n\n"
-                f"  tags = {{\n"
-                f"    Name        = \"main-vpc\"\n"
-                f"    Environment = \"{env}\"\n"
-                f"    Owner       = \"{owner}\"\n"
-                f"    ManagedBy   = \"Terraform\"\n"
-                f"  }}\n"
-                f"}}\n\n"
-                f"resource \"aws_flow_log\" \"vpc\" {{\n"
-                f"  log_destination      = aws_cloudwatch_log_group.vpc_flow.arn\n"
-                f"  log_destination_type = \"cloud-watch-logs\"\n"
-                f"  traffic_type         = \"ALL\"\n"
-                f"  vpc_id               = aws_vpc.main.id\n"
-                f"  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn\n"
-                f"}}\n"
-            )
+        if provider == "azure":
+            if res_type == "vpc":
+                cidr = params.get("cidr_block") or "10.0.0.0/16"
+                return (
+                    f"resource \"azurerm_resource_group\" \"rg\" {{\n"
+                    f"  name     = \"rg-secure-{env.lower()}\"\n"
+                    f"  location = \"eastus2\"\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_virtual_network\" \"vnet\" {{\n"
+                    f"  name                = \"vnet-main\"\n"
+                    f"  address_space       = [\"{cidr}\"]\n"
+                    f"  location            = azurerm_resource_group.rg.location\n"
+                    f"  resource_group_name = azurerm_resource_group.rg.name\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n"
+                )
+            else:
+                vm_size = params.get("instance_type") or "Standard_D2s_v3"
+                return (
+                    f"resource \"azurerm_resource_group\" \"rg\" {{\n"
+                    f"  name     = \"rg-secure-{env.lower()}\"\n"
+                    f"  location = \"eastus2\"\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"azurerm_linux_virtual_machine\" \"vm\" {{\n"
+                    f"  name                            = \"vm-secure-app\"\n"
+                    f"  resource_group_name             = azurerm_resource_group.rg.name\n"
+                    f"  location                        = azurerm_resource_group.rg.location\n"
+                    f"  size                            = \"{vm_size}\"\n"
+                    f"  admin_username                  = \"adminuser\"\n"
+                    f"  disable_password_authentication = true\n\n"
+                    f"  network_interface_ids = [\n"
+                    f"    azurerm_network_interface.nic.id,\n"
+                    f"  ]\n\n"
+                    f"  os_disk {{\n"
+                    f"    caching              = \"ReadWrite\"\n"
+                    f"    storage_account_type = \"StandardSSD_LRS\"\n"
+                    f"    disk_encryption_set_id = var.disk_encryption_set_id\n"
+                    f"  }}\n\n"
+                    f"  source_image_reference {{\n"
+                    f"    publisher = \"Canonical\"\n"
+                    f"    offer     = \"0001-com-ubuntu-server-jammy\"\n"
+                    f"    sku       = \"22_04-lts\"\n"
+                    f"    version   = \"latest\"\n"
+                    f"  }}\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n"
+                )
         else:
-            instance_type = params.get("instance_type") or "t3.medium"
-            ami_id = params.get("ami_id") or "var.ami_id"
-            if ami_id != "var.ami_id" and not ami_id.startswith('"'):
-                ami_id = f'"{ami_id}"'
-                
-            return (
-                f"resource \"aws_instance\" \"secure_app\" {{\n"
-                f"  ami                         = {ami_id}\n"
-                f"  instance_type               = \"{instance_type}\"\n"
-                f"  subnet_id                   = var.private_subnet_id\n"
-                f"  vpc_security_group_ids      = [aws_security_group.app.id]\n"
-                f"  associate_public_ip_address = false\n\n"
-                f"  metadata_options {{\n"
-                f"    http_endpoint = \"enabled\"\n"
-                f"    http_tokens   = \"required\"\n"
-                f"  }}\n\n"
-                f"  root_block_device {{\n"
-                f"    encrypted   = true\n"
-                f"    volume_type = \"gp3\"\n"
-                f"  }}\n\n"
-                f"  tags = {{\n"
-                f"    Name        = \"secure-app\"\n"
-                f"    Environment = \"{env}\"\n"
-                f"    Owner       = \"{owner}\"\n"
-                f"    ManagedBy   = \"Terraform\"\n"
-                f"  }}\n"
-                f"}}\n"
-            )
+            if res_type == "vpc":
+                cidr = params.get("cidr_block") or "10.0.0.0/16"
+                return (
+                    f"resource \"aws_vpc\" \"main\" {{\n"
+                    f"  cidr_block           = \"{cidr}\"\n"
+                    f"  enable_dns_support   = true\n"
+                    f"  enable_dns_hostnames = true\n\n"
+                    f"  tags = {{\n"
+                    f"    Name        = \"main-vpc\"\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"resource \"aws_flow_log\" \"vpc\" {{\n"
+                    f"  log_destination      = aws_cloudwatch_log_group.vpc_flow.arn\n"
+                    f"  log_destination_type = \"cloud-watch-logs\"\n"
+                    f"  traffic_type         = \"ALL\"\n"
+                    f"  vpc_id               = aws_vpc.main.id\n"
+                    f"  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn\n"
+                    f"}}\n"
+                )
+            else:
+                instance_type = params.get("instance_type") or "t3.medium"
+                ami_id = params.get("ami_id") or "var.ami_id"
+                if ami_id != "var.ami_id" and not ami_id.startswith('"'):
+                    ami_id = f'"{ami_id}"'
+                    
+                return (
+                    f"resource \"aws_instance\" \"secure_app\" {{\n"
+                    f"  ami                         = {ami_id}\n"
+                    f"  instance_type               = \"{instance_type}\"\n"
+                    f"  subnet_id                   = var.private_subnet_id\n"
+                    f"  vpc_security_group_ids      = [aws_security_group.app.id]\n"
+                    f"  associate_public_ip_address = false\n\n"
+                    f"  metadata_options {{\n"
+                    f"    http_endpoint = \"enabled\"\n"
+                    f"    http_tokens   = \"required\"\n"
+                    f"  }}\n\n"
+                    f"  root_block_device {{\n"
+                    f"    encrypted   = true\n"
+                    f"    volume_type = \"gp3\"\n"
+                    f"  }}\n\n"
+                    f"  tags = {{\n"
+                    f"    Name        = \"secure-app\"\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n"
+                )

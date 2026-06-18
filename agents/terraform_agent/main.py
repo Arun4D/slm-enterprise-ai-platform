@@ -105,13 +105,19 @@ class TerraformAgent(IAgent):
             params = {}
             normalized = query.lower()
             
+            # Extract provider
+            if "azure" in normalized or "azurerm" in normalized:
+                params["provider"] = "azure"
+            elif "aws" in normalized:
+                params["provider"] = "aws"
+
             # Extract CIDR
             cidr_match = re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\b', query)
             if cidr_match:
                 params["cidr_block"] = cidr_match.group(0)
                 
             # Extract environment
-            for env in ["dev", "prod", "staging", "testing", "development", "production"]:
+            for env in ["development", "production", "staging", "testing", "dev", "prod"]:
                 if env in normalized:
                     params["environment"] = env
                     break
@@ -140,7 +146,7 @@ class TerraformAgent(IAgent):
                 prompt = (
                     "You are an enterprise cloud architect extraction assistant.\n"
                     "Analyze the user's request and extract Terraform parameters. "
-                    "Output ONLY a JSON block with keys 'resource_type', 'instance_type', 'ami_id', 'cidr_block', 'environment', 'owner'. "
+                    "Output ONLY a JSON block with keys 'provider', 'resource_type', 'instance_type', 'ami_id', 'cidr_block', 'environment', 'owner'. "
                     "If a value is not mentioned, use null.\n\n"
                     f"Request: {query}\n"
                     "JSON:\n"

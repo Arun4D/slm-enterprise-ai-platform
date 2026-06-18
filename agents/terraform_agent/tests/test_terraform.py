@@ -62,6 +62,23 @@ def test_generate_hcl_custom_instance():
     assert 'Owner       = "AppSupport"' in code
 
 
+def test_generate_hcl_custom_azure_vnet():
+    """Test generating Azure HCL virtual network and resource group."""
+    params = {
+        "provider": "azure",
+        "resource_type": "vpc",
+        "cidr_block": "172.16.0.0/12",
+        "environment": "production",
+        "owner": "AzureTeam"
+    }
+    code = TerraformAuditor.generate_hcl("create azure vnet", params)
+    assert 'resource "azurerm_resource_group" "rg"' in code
+    assert 'resource "azurerm_virtual_network" "vnet"' in code
+    assert 'address_space       = ["172.16.0.0/12"]' in code
+    assert 'Environment = "Production"' in code
+    assert 'Owner       = "AzureTeam"' in code
+
+
 # ===========================================================================
 # Agent Integration Tests
 # ===========================================================================
@@ -94,6 +111,21 @@ async def test_agent_execute_generation(agent):
     assert 'cidr_block           = "192.168.5.0/24"' in code
     assert 'Environment = "Staging"' in code
     assert 'Owner       = "dbops"' in code
+
+
+@pytest.mark.anyio
+async def test_agent_execute_azure_generation(agent):
+    """Test executing a custom Azure generation prompt."""
+    plan = await agent.plan("generate terraform code for azure resource group and virtual network with cidr 10.1.0.0/16 in production by cloud-ops", {})
+    result = await agent.execute(plan)
+    assert result["status"] == "success"
+    assert result["result"]["action"] == "generate"
+    
+    code = result["result"]["code"]
+    assert 'resource "azurerm_virtual_network" "vnet"' in code
+    assert 'address_space       = ["10.1.0.0/16"]' in code
+    assert 'Environment = "Production"' in code
+    assert 'Owner       = "cloud-ops"' in code
 
 
 @pytest.mark.anyio
