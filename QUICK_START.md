@@ -262,7 +262,7 @@ pytest tests/test_security.py::test_path_validator_safe_path -vv
 ENVIRONMENT=development
 DEBUG=true
 CORS_ORIGINS=["http://localhost:3000"]
-SLM_MODEL_PATH=/models/qwen2.5-1.5b-instruct-gguf/model.gguf
+SLM_MODEL_PATH=/models/qwen2.5-coder-1.5b-instruct-gguf/model.gguf
 SLM_MODEL_THREADS=4
 PLUGIN_AUTO_DISCOVERY=true
 AUDIT_LOGGING_ENABLED=true

@@ -1015,7 +1015,7 @@ function App() {
 
             <div className={`mt-4 rounded-2xl border p-3 text-[11px] transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-100/50 text-slate-650'}`}>
               <p className={`font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Local Architecture Validated</p>
-              <p className="mt-1 leading-5">Running offline. Routing requests via internal Python adapters to Qwen 1.5B.</p>
+              <p className="mt-1 leading-5">Running offline. Routing requests via internal Python adapters to Qwen 2.5 Coder 1.5B.</p>
             </div>
           </aside>
 
@@ -1696,7 +1696,7 @@ function App() {
                   <div className={`rounded-2xl border p-4 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
                     <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Local GGUF Model settings</p>
                     <div className={`mt-2 space-y-1.5 font-mono text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                      <p>Path: backend/models/qwen2.5-1.5b-instruct-gguf/model.gguf</p>
+                      <p>Path: backend/models/qwen2.5-coder-1.5b-instruct-gguf/model.gguf</p>
                       <p>Threads limit: 4</p>
                       <p>Context window: 2048 tokens</p>
                       <p>Temperature bias: 0.15</p>

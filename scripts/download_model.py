@@ -10,8 +10,8 @@ import urllib.request
 from pathlib import Path
 
 # Approved GGUF model details
-DEFAULT_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-DEFAULT_DEST_PATH = Path(__file__).parent.parent / "backend" / "models" / "qwen2.5-1.5b-instruct-gguf" / "model.gguf"
+DEFAULT_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+DEFAULT_DEST_PATH = Path(__file__).parent.parent / "backend" / "models" / "qwen2.5-coder-1.5b-instruct-gguf" / "model.gguf"
 
 
 def format_size(size_bytes: int) -> str:

@@ -365,3 +365,20 @@ class SLMService:
             temperature=0.2,
             stop=["<|end|>"],
         )
+
+    async def generate_text(
+        self,
+        prompt: str,
+        max_tokens: int = 512,
+        temperature: float = 0.3,
+        stop: list[str] | None = None,
+    ) -> str:
+        """Generic text generation from the underlying model."""
+        if not self.available:
+            return ""
+        return await self._engine.generate_async(
+            prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stop=stop or ["<|end|>"],
+        )

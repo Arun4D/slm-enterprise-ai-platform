@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # SLM Model Configuration
     slm_enabled: bool = True  # Master toggle for SLM features
-    slm_model_path: str = str(ROOT_PATH / "backend" / "models" / "qwen2.5-1.5b-instruct-gguf" / "model.gguf")
+    slm_model_path: str = str(ROOT_PATH / "backend" / "models" / "qwen2.5-coder-1.5b-instruct-gguf" / "model.gguf")
     slm_model_context_size: int = 2048
     slm_model_threads: int = 4
     slm_model_gpu_layers: int = 0  # Set > 0 to offload to GPU

@@ -249,7 +249,7 @@ DEBUG=true
 CORS_ORIGINS=["http://localhost:3000"]
 
 # SLM Model
-SLM_MODEL_PATH=/models/qwen2.5-1.5b-instruct-gguf/model.gguf
+SLM_MODEL_PATH=/models/qwen2.5-coder-1.5b-instruct-gguf/model.gguf
 SLM_MODEL_CONTEXT_SIZE=2048
 SLM_MODEL_THREADS=4
 
@@ -268,9 +268,9 @@ AGENT_EXECUTION_TIMEOUT_SECONDS=300
 On Windows, prefer forward slashes or escaped backslashes in `.env`:
 
 ```powershell
-SLM_MODEL_PATH=C:/arun/workspace/qwen2.5-1.5b-instruct-gguf/model.gguf
+SLM_MODEL_PATH=C:/arun/workspace/qwen2.5-coder-1.5b-instruct-gguf/model.gguf
 # or
-SLM_MODEL_PATH=C:\\arun\\workspace\\qwen2.5-1.5b-instruct-gguf\\model.gguf
+SLM_MODEL_PATH=C:\\arun\\workspace\\qwen2.5-coder-1.5b-instruct-gguf\\model.gguf
 ```
 
 You can also point `SLM_MODEL_PATH` at the model directory; the backend will

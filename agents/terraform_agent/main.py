@@ -99,7 +99,73 @@ class TerraformAgent(IAgent):
         query = ctx.get("query", "")
 
         if action == "generate":
-            code = TerraformAuditor.generate_hcl(query)
+            import re
+            
+            # 1. Fallback regex parsing logic
+            params = {}
+            normalized = query.lower()
+            
+            # Extract CIDR
+            cidr_match = re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\b', query)
+            if cidr_match:
+                params["cidr_block"] = cidr_match.group(0)
+                
+            # Extract environment
+            for env in ["dev", "prod", "staging", "testing", "development", "production"]:
+                if env in normalized:
+                    params["environment"] = env
+                    break
+                    
+            # Extract instance type
+            instance_match = re.search(r'\b[a-z0-9]+\.[a-z0-9]+\b', normalized)
+            if instance_match and instance_match.group(0) not in ["aws_instance", "var.ami_id"]:
+                params["instance_type"] = instance_match.group(0)
+                
+            # Extract AMI ID
+            ami_match = re.search(r'\bami-[a-f0-9]+\b', normalized)
+            if ami_match:
+                params["ami_id"] = ami_match.group(0)
+
+            # Extract Owner
+            owner_match = re.search(r'owner\s*(?:is|=|\s+by\s+)\s*([a-zA-Z0-9_-]+)', normalized)
+            if owner_match:
+                params["owner"] = owner_match.group(1)
+            elif "by " in normalized:
+                owner_by_match = re.search(r'by\s+([a-zA-Z0-9_-]+)', normalized)
+                if owner_by_match:
+                    params["owner"] = owner_by_match.group(1)
+
+            # 2. SLM-based extraction (if available)
+            if self._slm_service is not None and self._slm_service.available:
+                prompt = (
+                    "You are an enterprise cloud architect extraction assistant.\n"
+                    "Analyze the user's request and extract Terraform parameters. "
+                    "Output ONLY a JSON block with keys 'resource_type', 'instance_type', 'ami_id', 'cidr_block', 'environment', 'owner'. "
+                    "If a value is not mentioned, use null.\n\n"
+                    f"Request: {query}\n"
+                    "JSON:\n"
+                )
+                try:
+                    slm_result = await self._slm_service.generate_text(
+                        prompt,
+                        max_tokens=128,
+                        temperature=0.0,
+                        stop=["<|end|>", "\n\n"]
+                    )
+                    if slm_result:
+                        import json
+                        json_start = slm_result.find("{")
+                        json_end = slm_result.rfind("}")
+                        if json_start != -1 and json_end != -1:
+                            slm_params = json.loads(slm_result[json_start:json_end+1])
+                            for k, v in slm_params.items():
+                                if v is not None:
+                                    params[k] = v
+                except Exception as e:
+                    logger.error(f"Failed to extract parameters via SLM: {e}")
+
+            # 3. Generate HCL with parameters
+            code = TerraformAuditor.generate_hcl(query, params)
             return {
                 "status": "success",
                 "result": {

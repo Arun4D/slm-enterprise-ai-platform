@@ -113,50 +113,71 @@ class TerraformAuditor:
         }
 
     @staticmethod
-    def generate_hcl(query: str) -> str:
-        """Generate approved Terraform HCL starter blocks."""
-        normalized = query.lower()
-        if "vpc" in normalized or "network" in normalized:
+    def generate_hcl(query: str, params: dict | None = None) -> str:
+        """Generate approved Terraform HCL starter blocks based on parameters."""
+        if not params:
+            params = {}
+            
+        # Extract environment
+        env = params.get("environment") or "Production"
+        # Capitalize environment for tagging
+        env = env.strip().capitalize() if env else "Production"
+        
+        # Extract owner
+        owner = params.get("owner") or "Platform_Ops"
+        owner = owner.strip()
+        
+        # Extract resource type
+        res_type = params.get("resource_type") or ("vpc" if any(kw in query.lower() for kw in ["vpc", "network"]) else "instance")
+        
+        if res_type == "vpc":
+            cidr = params.get("cidr_block") or "10.0.0.0/16"
             return (
-                "resource \"aws_vpc\" \"main\" {\n"
-                "  cidr_block           = \"10.0.0.0/16\"\n"
-                "  enable_dns_support   = true\n"
-                "  enable_dns_hostnames = true\n\n"
-                "  tags = {\n"
-                "    Name        = \"main-vpc\"\n"
-                "    Environment = \"Production\"\n"
-                "    Owner       = \"Platform_Ops\"\n"
-                "    ManagedBy   = \"Terraform\"\n"
-                "  }\n"
-                "}\n\n"
-                "resource \"aws_flow_log\" \"vpc\" {\n"
-                "  log_destination      = aws_cloudwatch_log_group.vpc_flow.arn\n"
-                "  log_destination_type = \"cloud-watch-logs\"\n"
-                "  traffic_type         = \"ALL\"\n"
-                "  vpc_id               = aws_vpc.main.id\n"
-                "  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn\n"
-                "}\n"
+                f"resource \"aws_vpc\" \"main\" {{\n"
+                f"  cidr_block           = \"{cidr}\"\n"
+                f"  enable_dns_support   = true\n"
+                f"  enable_dns_hostnames = true\n\n"
+                f"  tags = {{\n"
+                f"    Name        = \"main-vpc\"\n"
+                f"    Environment = \"{env}\"\n"
+                f"    Owner       = \"{owner}\"\n"
+                f"    ManagedBy   = \"Terraform\"\n"
+                f"  }}\n"
+                f"}}\n\n"
+                f"resource \"aws_flow_log\" \"vpc\" {{\n"
+                f"  log_destination      = aws_cloudwatch_log_group.vpc_flow.arn\n"
+                f"  log_destination_type = \"cloud-watch-logs\"\n"
+                f"  traffic_type         = \"ALL\"\n"
+                f"  vpc_id               = aws_vpc.main.id\n"
+                f"  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn\n"
+                f"}}\n"
             )
-        return (
-            "resource \"aws_instance\" \"secure_app\" {\n"
-            "  ami                         = var.ami_id\n"
-            "  instance_type               = \"t3.medium\"\n"
-            "  subnet_id                   = var.private_subnet_id\n"
-            "  vpc_security_group_ids      = [aws_security_group.app.id]\n"
-            "  associate_public_ip_address = false\n\n"
-            "  metadata_options {\n"
-            "    http_endpoint = \"enabled\"\n"
-            "    http_tokens   = \"required\"\n"
-            "  }\n\n"
-            "  root_block_device {\n"
-            "    encrypted   = true\n"
-            "    volume_type = \"gp3\"\n"
-            "  }\n\n"
-            "  tags = {\n"
-            "    Name        = \"secure-app\"\n"
-            "    Environment = \"Production\"\n"
-            "    Owner       = \"Platform_Ops\"\n"
-            "    ManagedBy   = \"Terraform\"\n"
-            "  }\n"
-            "}\n"
-        )
+        else:
+            instance_type = params.get("instance_type") or "t3.medium"
+            ami_id = params.get("ami_id") or "var.ami_id"
+            if ami_id != "var.ami_id" and not ami_id.startswith('"'):
+                ami_id = f'"{ami_id}"'
+                
+            return (
+                f"resource \"aws_instance\" \"secure_app\" {{\n"
+                f"  ami                         = {ami_id}\n"
+                f"  instance_type               = \"{instance_type}\"\n"
+                f"  subnet_id                   = var.private_subnet_id\n"
+                f"  vpc_security_group_ids      = [aws_security_group.app.id]\n"
+                f"  associate_public_ip_address = false\n\n"
+                f"  metadata_options {{\n"
+                f"    http_endpoint = \"enabled\"\n"
+                f"    http_tokens   = \"required\"\n"
+                f"  }}\n\n"
+                f"  root_block_device {{\n"
+                f"    encrypted   = true\n"
+                f"    volume_type = \"gp3\"\n"
+                f"  }}\n\n"
+                f"  tags = {{\n"
+                f"    Name        = \"secure-app\"\n"
+                f"    Environment = \"{env}\"\n"
+                f"    Owner       = \"{owner}\"\n"
+                f"    ManagedBy   = \"Terraform\"\n"
+                f"  }}\n"
+                f"}}\n"
+            )
