@@ -27,6 +27,70 @@ MOCK_PLANS = {
     }
 }
 
+PROVIDER_REQUIREMENTS = {
+    "aws": {"source": "hashicorp/aws", "version": "~> 5.0"},
+    "azurerm": {"source": "hashicorp/azurerm", "version": "~> 3.0"},
+    "google": {"source": "hashicorp/google", "version": "~> 5.0"},
+    "kubernetes": {"source": "hashicorp/kubernetes", "version": "~> 2.0"},
+    "helm": {"source": "hashicorp/helm", "version": "~> 2.0"},
+    "vault": {"source": "hashicorp/vault", "version": "~> 4.0"},
+    "random": {"source": "hashicorp/random", "version": "~> 3.0"},
+    "local": {"source": "hashicorp/local", "version": "~> 2.0"},
+    "null": {"source": "hashicorp/null", "version": "~> 3.0"},
+}
+
+PROVIDER_ALIASES = {
+    "amazon": "aws",
+    "aws": "aws",
+    "azure": "azurerm",
+    "azurerm": "azurerm",
+    "gcp": "google",
+    "google": "google",
+    "google cloud": "google",
+    "helm": "helm",
+    "k8s": "kubernetes",
+    "kubernetes": "kubernetes",
+    "local": "local",
+    "null": "null",
+    "random": "random",
+    "vault": "vault",
+}
+
+RESOURCE_HINTS = {
+    "storage_webapp": ["storage account and azure webapp", "storage account and webapp", "storage and webapp"],
+    "storage": ["bucket", "blob", "s3", "storage", "storage account"],
+    "webapp": ["app service", "web app", "webapp"],
+    "vpc": ["network", "subnet", "virtual network", "vnet", "vpc"],
+    "database": ["database", "db", "postgres", "postgresql", "rds", "sql"],
+    "instance": ["compute", "ec2", "instance", "server", "virtual machine", "vm"],
+    "security_group": ["firewall", "network security group", "nsg", "security group"],
+    "deployment": ["deployment"],
+    "namespace": ["namespace"],
+    "release": ["chart", "helm release", "release"],
+    "secret": ["secret"],
+    "file": ["file"],
+    "password": ["password"],
+}
+
+GENERIC_RESOURCE_TYPES = {
+    ("aws", "storage"): "aws_s3_bucket",
+    ("aws", "database"): "aws_db_instance",
+    ("aws", "security_group"): "aws_security_group",
+    ("azurerm", "database"): "azurerm_postgresql_flexible_server",
+    ("azurerm", "security_group"): "azurerm_network_security_group",
+    ("google", "storage"): "google_storage_bucket",
+    ("google", "instance"): "google_compute_instance",
+    ("google", "vpc"): "google_compute_network",
+    ("google", "database"): "google_sql_database_instance",
+    ("kubernetes", "deployment"): "kubernetes_deployment_v1",
+    ("kubernetes", "namespace"): "kubernetes_namespace_v1",
+    ("helm", "release"): "helm_release",
+    ("vault", "secret"): "vault_kv_secret_v2",
+    ("random", "password"): "random_password",
+    ("local", "file"): "local_file",
+    ("null", "resource"): "null_resource",
+}
+
 class TerraformAuditor:
     """Audits Terraform plan/HCL data against static security guardrails."""
 
@@ -134,26 +198,16 @@ class TerraformAuditor:
         owner = params.get("owner") or "Platform_Ops"
         owner = owner.strip()
         
-        # Extract provider (aws or azure)
-        provider_raw = params.get("provider") or ""
-        provider_raw = provider_raw.strip().lower()
-        if "azure" in provider_raw or "azurerm" in provider_raw or any(kw in query.lower() for kw in ["azure", "azurerm"]):
-            provider = "azure"
-        else:
-            provider = "aws"
+        query_lower = query.lower()
+        provider_raw = (params.get("provider") or "").strip().lower()
+        provider = TerraformAuditor._detect_provider(query_lower, provider_raw)
 
         # Extract resource type
-        res_type_raw = params.get("resource_type") or ""
-        res_type_raw = res_type_raw.strip().lower()
-        if any(kw in res_type_raw for kw in ["vpc", "network", "vnet", "virtual_network", "resource_group", "subnet"]):
-            res_type = "vpc"
-        elif any(kw in res_type_raw for kw in ["instance", "vm", "virtual_machine", "server"]):
-            res_type = "instance"
-        else:
-            res_type = "vpc" if any(kw in query.lower() for kw in ["vpc", "network", "vnet", "virtual network"]) else "instance"
+        res_type_raw = (params.get("resource_type") or "").strip().lower()
+        res_type = TerraformAuditor._detect_resource_type(query_lower, res_type_raw)
         
-        if provider == "azure":
-            is_hub_spoke = "hub" in query.lower() and "spoke" in query.lower()
+        if provider == "azurerm":
+            is_hub_spoke = "hub" in query_lower and "spoke" in query_lower
             if is_hub_spoke:
                 return (
                     f"resource \"azurerm_resource_group\" \"rg\" {{\n"
@@ -202,6 +256,109 @@ class TerraformAuditor:
                     f"  allow_forwarded_traffic      = true\n"
                     f"}}\n"
                 )
+            elif res_type in {"storage", "webapp", "storage_webapp"}:
+                storage_block = ""
+                webapp_block = ""
+                if res_type in {"storage", "storage_webapp"}:
+                    storage_block = (
+                        f"resource \"azurerm_storage_account\" \"app\" {{\n"
+                        f"  name                            = \"stsecure{env.lower()}001\"\n"
+                        f"  resource_group_name             = azurerm_resource_group.rg.name\n"
+                        f"  location                        = azurerm_resource_group.rg.location\n"
+                        f"  account_tier                    = \"Standard\"\n"
+                        f"  account_replication_type        = \"ZRS\"\n"
+                        f"  min_tls_version                 = \"TLS1_2\"\n"
+                        f"  allow_nested_items_to_be_public = false\n"
+                        f"  shared_access_key_enabled       = false\n"
+                        f"  public_network_access_enabled   = false\n"
+                        f"  infrastructure_encryption_enabled = true\n\n"
+                        f"  blob_properties {{\n"
+                        f"    versioning_enabled  = true\n"
+                        f"    change_feed_enabled = true\n\n"
+                        f"    delete_retention_policy {{\n"
+                        f"      days = 30\n"
+                        f"    }}\n\n"
+                        f"    container_delete_retention_policy {{\n"
+                        f"      days = 30\n"
+                        f"    }}\n"
+                        f"  }}\n\n"
+                        f"  tags = {{\n"
+                        f"    Environment = \"{env}\"\n"
+                        f"    Owner       = \"{owner}\"\n"
+                        f"    ManagedBy   = \"Terraform\"\n"
+                        f"  }}\n"
+                        f"}}\n"
+                    )
+                if res_type in {"webapp", "storage_webapp"}:
+                    webapp_block = (
+                        f"resource \"azurerm_service_plan\" \"app\" {{\n"
+                        f"  name                = \"asp-secure-{env.lower()}\"\n"
+                        f"  resource_group_name = azurerm_resource_group.rg.name\n"
+                        f"  location            = azurerm_resource_group.rg.location\n"
+                        f"  os_type             = \"Linux\"\n"
+                        f"  sku_name            = \"P1v3\"\n\n"
+                        f"  tags = {{\n"
+                        f"    Environment = \"{env}\"\n"
+                        f"    Owner       = \"{owner}\"\n"
+                        f"    ManagedBy   = \"Terraform\"\n"
+                        f"  }}\n"
+                        f"}}\n\n"
+                        f"resource \"azurerm_linux_web_app\" \"app\" {{\n"
+                        f"  name                = \"web-secure-{env.lower()}\"\n"
+                        f"  resource_group_name = azurerm_resource_group.rg.name\n"
+                        f"  location            = azurerm_resource_group.rg.location\n"
+                        f"  service_plan_id     = azurerm_service_plan.app.id\n"
+                        f"  https_only          = true\n\n"
+                        f"  identity {{\n"
+                        f"    type = \"SystemAssigned\"\n"
+                        f"  }}\n\n"
+                        f"  site_config {{\n"
+                        f"    always_on              = true\n"
+                        f"    ftps_state             = \"Disabled\"\n"
+                        f"    minimum_tls_version    = \"1.2\"\n"
+                        f"    scm_minimum_tls_version = \"1.2\"\n\n"
+                        f"    application_stack {{\n"
+                        f"      python_version = \"3.11\"\n"
+                        f"    }}\n"
+                        f"  }}\n\n"
+                        f"  logs {{\n"
+                        f"    detailed_error_messages = true\n"
+                        f"    failed_request_tracing  = true\n\n"
+                        f"    application_logs {{\n"
+                        f"      file_system_level = \"Information\"\n"
+                        f"    }}\n\n"
+                        f"    http_logs {{\n"
+                        f"      file_system {{\n"
+                        f"        retention_in_days = 7\n"
+                        f"        retention_in_mb   = 35\n"
+                        f"      }}\n"
+                        f"    }}\n"
+                        f"  }}\n\n"
+                        f"  app_settings = {{\n"
+                        f"    WEBSITE_RUN_FROM_PACKAGE = \"1\"\n"
+                        f"  }}\n\n"
+                        f"  tags = {{\n"
+                        f"    Environment = \"{env}\"\n"
+                        f"    Owner       = \"{owner}\"\n"
+                        f"    ManagedBy   = \"Terraform\"\n"
+                        f"  }}\n"
+                        f"}}\n"
+                    )
+
+                return (
+                    f"resource \"azurerm_resource_group\" \"rg\" {{\n"
+                    f"  name     = \"rg-secure-{env.lower()}\"\n"
+                    f"  location = \"eastus2\"\n\n"
+                    f"  tags = {{\n"
+                    f"    Environment = \"{env}\"\n"
+                    f"    Owner       = \"{owner}\"\n"
+                    f"    ManagedBy   = \"Terraform\"\n"
+                    f"  }}\n"
+                    f"}}\n\n"
+                    f"{storage_block}"
+                    + ("\n" if storage_block and webapp_block else "")
+                    + f"{webapp_block}"
+                )
             elif res_type == "vpc":
                 cidr = params.get("cidr_block") or "10.0.0.0/16"
                 return (
@@ -226,7 +383,7 @@ class TerraformAuditor:
                     f"  }}\n"
                     f"}}\n"
                 )
-            else:
+            elif res_type == "instance":
                 vm_size = params.get("instance_type") or "Standard_D2s_v3"
                 return (
                     f"resource \"azurerm_resource_group\" \"rg\" {{\n"
@@ -266,7 +423,9 @@ class TerraformAuditor:
                     f"  }}\n"
                     f"}}\n"
                 )
-        else:
+            else:
+                return TerraformAuditor._generate_provider_scaffold(provider, res_type, env, owner, query)
+        elif provider == "aws":
             if res_type == "vpc":
                 cidr = params.get("cidr_block") or "10.0.0.0/16"
                 return (
@@ -289,7 +448,7 @@ class TerraformAuditor:
                     f"  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn\n"
                     f"}}\n"
                 )
-            else:
+            elif res_type == "instance":
                 instance_type = params.get("instance_type") or "t3.medium"
                 ami_id = params.get("ami_id") or "var.ami_id"
                 if ami_id != "var.ami_id" and not ami_id.startswith('"'):
@@ -318,3 +477,84 @@ class TerraformAuditor:
                     f"  }}\n"
                     f"}}\n"
                 )
+            else:
+                return TerraformAuditor._generate_provider_scaffold(provider, res_type, env, owner, query)
+
+        return TerraformAuditor._generate_provider_scaffold(provider, res_type, env, owner, query)
+
+    @staticmethod
+    def _detect_provider(query_lower: str, provider_raw: str) -> str:
+        """Detect Terraform provider by explicit parameter, alias, or resource prefix."""
+        for candidate in [provider_raw, query_lower]:
+            for alias, canonical in PROVIDER_ALIASES.items():
+                if alias and alias in candidate:
+                    return canonical
+
+        prefixed_resource = re.search(r'\b([a-z][a-z0-9]*)_[a-z0-9_]+\b', query_lower)
+        if prefixed_resource:
+            prefix = prefixed_resource.group(1)
+            if prefix in PROVIDER_REQUIREMENTS:
+                return prefix
+
+        return "aws"
+
+    @staticmethod
+    def _detect_resource_type(query_lower: str, res_type_raw: str) -> str:
+        """Detect the intended resource family without provider-specific hallucination."""
+        combined = f"{res_type_raw} {query_lower}".strip()
+        for resource_type, hints in RESOURCE_HINTS.items():
+            if any(hint in combined for hint in hints):
+                return resource_type
+
+        explicit_resource = re.search(r'\b[a-z][a-z0-9]*_([a-z0-9_]+)\b', combined)
+        if explicit_resource:
+            return explicit_resource.group(1).strip("_")
+
+        return res_type_raw or "resource"
+
+    @staticmethod
+    def _generate_provider_scaffold(provider: str, res_type: str, env: str, owner: str, query: str) -> str:
+        """Generate a provider-aware scaffold when no approved deep template exists."""
+        requirement = PROVIDER_REQUIREMENTS.get(
+            provider,
+            {"source": f"hashicorp/{provider}", "version": ">= 0.0.0"},
+        )
+        resource_type = GENERIC_RESOURCE_TYPES.get(
+            (provider, res_type),
+            f"{provider}_{TerraformAuditor._slug(res_type)}",
+        )
+        resource_name = TerraformAuditor._slug(res_type or "generated")
+
+        return (
+            f"terraform {{\n"
+            f"  required_providers {{\n"
+            f"    {provider} = {{\n"
+            f"      source  = \"{requirement['source']}\"\n"
+            f"      version = \"{requirement['version']}\"\n"
+            f"    }}\n"
+            f"  }}\n"
+            f"}}\n\n"
+            f"provider \"{provider}\" {{\n"
+            f"  # Configure credentials, region, endpoint, or context through environment variables or backend-managed secrets.\n"
+            f"}}\n\n"
+            f"resource \"{resource_type}\" \"{resource_name}\" {{\n"
+            f"  # Generated deterministic scaffold for: {TerraformAuditor._sanitize_comment(query)}\n"
+            f"  # Complete required arguments from the pinned provider documentation before apply.\n\n"
+            f"  tags = {{\n"
+            f"    Environment = \"{env}\"\n"
+            f"    Owner       = \"{owner}\"\n"
+            f"    ManagedBy   = \"Terraform\"\n"
+            f"  }}\n"
+            f"}}\n"
+        )
+
+    @staticmethod
+    def _slug(value: str) -> str:
+        """Return a Terraform identifier-safe slug."""
+        slug = re.sub(r"[^a-z0-9_]+", "_", value.lower()).strip("_")
+        return slug or "generated"
+
+    @staticmethod
+    def _sanitize_comment(value: str) -> str:
+        """Keep generated comments single-line and non-executable."""
+        return re.sub(r"\s+", " ", value).replace("*/", "").strip()[:160]

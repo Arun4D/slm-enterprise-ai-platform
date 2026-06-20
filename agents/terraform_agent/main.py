@@ -1,8 +1,10 @@
 """
 Terraform Agent implementation.
 """
+import json
 import logging
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, Any
 
 from app.services.plugin_manager import IAgent
 from tools import TerraformAuditor
@@ -11,6 +13,50 @@ if TYPE_CHECKING:
     from app.core.slm.service import SLMService
 
 logger = logging.getLogger(__name__)
+
+GENERATION_KEYWORDS = {
+    "build",
+    "code",
+    "create",
+    "generate",
+    "make",
+    "provision",
+    "scaffold",
+    "setup",
+    "template",
+    "write",
+}
+
+TERRAFORM_KEYWORDS = {
+    "aws_",
+    "azurerm",
+    "ec2",
+    "gcp",
+    "google_",
+    "guardrail",
+    "hcl",
+    "helm",
+    "infrastructure-as-code",
+    "iac",
+    "instance",
+    "kubernetes",
+    "kubernetes_",
+    "module ",
+    "provider ",
+    "random_",
+    "resource group",
+    "security group",
+    "subnet",
+    "terraform",
+    "tf plan",
+    "vault_",
+    "vnet",
+    "vpc",
+}
+
+VALIDATION_KEYWORDS = {"audit", "check", "review", "scan", "validate"}
+
+TERRAFORM_BLOCK_PATTERN = re.compile(r'\b(resource|module|data|provider|variable|output)\s+"', re.IGNORECASE)
 
 class TerraformAgent(IAgent):
     """
@@ -28,6 +74,10 @@ class TerraformAgent(IAgent):
 
     def can_handle(self, intent: str) -> bool:
         """Check if this agent should handle the intent."""
+        normalized = intent.lower()
+        if self._looks_like_terraform_request(normalized):
+            return True
+
         if self._slm_service is not None and self._slm_service.available:
             result = self._slm_service.classify_intent_sync(
                 intent,
@@ -39,21 +89,20 @@ class TerraformAgent(IAgent):
             if result == "terraform_agent":
                 return True
 
-        tf_keywords = ["terraform", "tf plan", "hcl", "infrastructure-as-code", "security group", "guardrail"]
-        normalized = intent.lower()
-        return any(kw in normalized for kw in tf_keywords)
+        return False
 
     async def plan(self, intent: str, context: dict) -> dict:
         """Decompose intent into auditing or generation tasks."""
         logger.info(f"Terraform Agent planning for: '{intent}'")
         
         normalized = intent.lower()
-        is_generation = any(kw in normalized for kw in ["generate", "create", "write", "setup", "make", "template", "code"])
+        is_generation = self._is_generation_request(normalized)
         code_text = context.get("code_text") or context.get("uploaded_text") or ""
-        validation_requested = any(kw in normalized for kw in ["validate", "review", "audit", "check", "scan"])
-        is_validation = bool(context.get("uploaded_files")) or (bool(code_text.strip()) and validation_requested)
+        validation_requested = any(kw in normalized for kw in VALIDATION_KEYWORDS)
+        pasted_or_uploaded_hcl = bool(code_text.strip()) and bool(TERRAFORM_BLOCK_PATTERN.search(code_text))
+        is_validation = bool(context.get("uploaded_files")) or (pasted_or_uploaded_hcl and validation_requested)
 
-        if is_validation and not is_generation:
+        if is_validation:
             action = "validate"
             steps = [
                 "Load Terraform HCL or plan content from pasted text or uploaded files",
@@ -99,100 +148,19 @@ class TerraformAgent(IAgent):
         query = ctx.get("query", "")
 
         if action == "generate":
-            import re
-            
-            # 1. Fallback regex parsing logic
-            params = {}
-            normalized = query.lower()
-            
-            # Extract provider
-            if "azure" in normalized or "azurerm" in normalized:
-                params["provider"] = "azure"
-            elif "aws" in normalized:
-                params["provider"] = "aws"
+            params = self._extract_parameters_with_rules(query)
+            params.update(await self._extract_parameters_with_slm(query))
 
-            # Extract CIDR
-            cidr_match = re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\b', query)
-            if cidr_match:
-                params["cidr_block"] = cidr_match.group(0)
-                
-            # Extract environment
-            for env in ["development", "production", "staging", "testing", "dev", "prod"]:
-                if env in normalized:
-                    params["environment"] = env
-                    break
-                    
-            # Extract instance type
-            instance_match = re.search(r'\b[a-z0-9]+\.[a-z0-9]+\b', normalized)
-            if instance_match and instance_match.group(0) not in ["aws_instance", "var.ami_id"]:
-                params["instance_type"] = instance_match.group(0)
-                
-            # Extract AMI ID
-            ami_match = re.search(r'\bami-[a-f0-9]+\b', normalized)
-            if ami_match:
-                params["ami_id"] = ami_match.group(0)
-
-            # Extract Owner
-            owner_match = re.search(r'owner\s*(?:is|=|\s+by\s+)\s*([a-zA-Z0-9_-]+)', normalized)
-            if owner_match:
-                params["owner"] = owner_match.group(1)
-            elif "by " in normalized:
-                owner_by_match = re.search(r'by\s+([a-zA-Z0-9_-]+)', normalized)
-                if owner_by_match:
-                    params["owner"] = owner_by_match.group(1)
-
-            # 2. SLM-based extraction (if available)
-            if self._slm_service is not None and self._slm_service.available:
-                system_prompt = (
-                    "You are an enterprise cloud architect extraction assistant.\n"
-                    "Analyze the user's request and extract Terraform parameters. "
-                    "Output ONLY a JSON block with keys 'provider', 'resource_type', 'instance_type', 'ami_id', 'cidr_block', 'environment', 'owner'. "
-                    "If a value is not mentioned, use null."
-                )
-                prompt = (
-                    f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
-                    f"<|im_start|>user\nRequest: {query}<|im_end|>\n"
-                    f"<|im_start|>assistant\n"
-                )
-                try:
-                    slm_result = await self._slm_service.generate_text(
-                        prompt,
-                        max_tokens=256,
-                        temperature=0.0,
-                        stop=["<|im_end|>", "<|endoftext|>"]
-                    )
-                    if slm_result:
-                        import json
-                        
-                        json_str = slm_result.strip()
-                        # Strip Markdown code blocks if present
-                        if json_str.startswith("```"):
-                            first_newline = json_str.find("\n")
-                            if first_newline != -1:
-                                json_str = json_str[first_newline:]
-                            else:
-                                json_str = json_str[3:]
-                        if json_str.endswith("```"):
-                            json_str = json_str[:-3]
-                            
-                        json_str = json_str.strip()
-                        json_start = json_str.find("{")
-                        json_end = json_str.rfind("}")
-                        if json_start != -1 and json_end != -1:
-                            slm_params = json.loads(json_str[json_start:json_end+1])
-                            for k, v in slm_params.items():
-                                if v is not None and v != "null" and v != "None":
-                                    params[k] = v
-                except Exception as e:
-                    logger.error(f"Failed to extract parameters via SLM: {e}")
-
-            # 3. Generate HCL with parameters
             code = TerraformAuditor.generate_hcl(query, params)
+            validation = TerraformAuditor.validate_hcl(code)
             return {
                 "status": "success",
                 "result": {
                     "action": "generate",
-                    "code": code
+                    "code": code,
+                    "parameters": params,
+                    "validation": validation,
+                    "generator": "deterministic_template",
                 }
             }
         elif action == "validate":
@@ -228,15 +196,17 @@ class TerraformAgent(IAgent):
 
         if action == "generate":
             code = data.get("code", "")
+            validation = data.get("validation", {})
             summary = (
-                f"### 🛠️ Terraform Infrastructure HCL Code Generator\n\n"
+                f"### Terraform Infrastructure HCL Code Generator\n\n"
                 f"I have generated compliant, highly secure Terraform HCL resources containing mandatory tags and encrypted storage guardrails:\n\n"
                 f"```hcl\n"
                 f"{code}"
                 f"```\n\n"
-                f"#### 🔒 Compliant Features Included:\n"
+                f"#### Compliant Features Included:\n"
                 f"- **Mandatory tagging** details: `'Environment'` and `'Owner'` values are pre-assigned.\n"
-                f"- **Security default state**: Root storage blocks have `encrypted = true` enabled."
+                f"- **Security default state**: Root storage blocks have `encrypted = true` enabled where compute storage is generated.\n"
+                f"- **Guardrail validation**: `{validation.get('status', 'unknown')}` with `{validation.get('finding_count', 0)}` finding(s)."
             )
             return summary
         elif action == "validate":
@@ -266,12 +236,12 @@ class TerraformAgent(IAgent):
             violations_md = ""
             violations = audit.get("violations", [])
             if violations:
-                violations_md = "\n".join(f"- ❌ **Violation**: {v}" for v in violations)
+                violations_md = "\n".join(f"- **Violation**: {v}" for v in violations)
             else:
-                violations_md = "- 🌟 **No compliance violations detected**."
+                violations_md = "- **No compliance violations detected**."
 
             summary = (
-                f"### 🛠️ Terraform Infrastructure-as-Code Audit\n\n"
+                f"### Terraform Infrastructure-as-Code Audit\n\n"
                 f"| Resource ID | Component Type | Status Level |\n"
                 f"| :--- | :--- | :--- |\n"
                 f"| `{audit.get('resource')}` | `{audit.get('type')}` | **{audit.get('compliance_status')}** |\n\n"
@@ -281,3 +251,161 @@ class TerraformAgent(IAgent):
                 f"> {audit.get('remediation')}\n"
             )
             return summary
+
+    def _looks_like_terraform_request(self, normalized: str) -> bool:
+        """Route Terraform/IaC prompts without depending on the SLM."""
+        return any(kw in normalized for kw in TERRAFORM_KEYWORDS)
+
+    def _is_generation_request(self, normalized: str) -> bool:
+        """Identify Terraform code generation prompts."""
+        return any(kw in normalized for kw in GENERATION_KEYWORDS)
+
+    def _extract_parameters_with_rules(self, query: str) -> dict[str, str]:
+        """Extract safe template parameters using deterministic rules."""
+        params: dict[str, str] = {}
+        normalized = query.lower()
+
+        if "azure" in normalized or "azurerm" in normalized:
+            params["provider"] = "azurerm"
+        elif "aws" in normalized or "ec2" in normalized or "vpc" in normalized:
+            params["provider"] = "aws"
+        elif "google" in normalized or "gcp" in normalized or "google_" in normalized:
+            params["provider"] = "google"
+        elif "kubernetes" in normalized or "k8s" in normalized or "kubernetes_" in normalized:
+            params["provider"] = "kubernetes"
+        elif "helm" in normalized:
+            params["provider"] = "helm"
+        elif "vault" in normalized or "vault_" in normalized:
+            params["provider"] = "vault"
+        elif "random_" in normalized or "random provider" in normalized:
+            params["provider"] = "random"
+        elif "local_" in normalized or "local provider" in normalized:
+            params["provider"] = "local"
+        elif "null_" in normalized or "null provider" in normalized:
+            params["provider"] = "null"
+
+        wants_storage = any(term in normalized for term in ["bucket", "s3", "storage", "storage account"])
+        wants_webapp = any(term in normalized for term in ["webapp", "web app", "app service"])
+        if wants_storage and wants_webapp:
+            params["resource_type"] = "storage_webapp"
+        elif wants_storage:
+            params["resource_type"] = "storage"
+        elif wants_webapp:
+            params["resource_type"] = "webapp"
+        elif any(term in normalized for term in ["database", "db", "postgres", "postgresql", "rds", "sql"]):
+            params["resource_type"] = "database"
+        elif any(term in normalized for term in ["vpc", "vnet", "network", "subnet", "resource group"]):
+            params["resource_type"] = "vpc"
+        elif any(term in normalized for term in ["ec2", "instance", "server", "vm", "virtual machine"]):
+            params["resource_type"] = "instance"
+        elif any(term in normalized for term in ["firewall", "network security group", "nsg", "security group"]):
+            params["resource_type"] = "security_group"
+        elif "deployment" in normalized:
+            params["resource_type"] = "deployment"
+        elif "namespace" in normalized:
+            params["resource_type"] = "namespace"
+        elif "helm release" in normalized or "chart" in normalized:
+            params["resource_type"] = "release"
+        elif "secret" in normalized:
+            params["resource_type"] = "secret"
+        else:
+            explicit_resource = re.search(r"\b[a-z][a-z0-9]*_([a-z0-9_]+)\b", normalized)
+            if explicit_resource:
+                params["resource_type"] = explicit_resource.group(1).strip("_")
+
+        cidr_match = re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\b", query)
+        if cidr_match:
+            params["cidr_block"] = cidr_match.group(0)
+
+        for env in ["development", "production", "staging", "testing", "dev", "prod"]:
+            if re.search(rf"\b{env}\b", normalized):
+                params["environment"] = env
+                break
+
+        instance_match = re.search(r"\b(?:[a-z]\d|t\d|m\d|c\d|r\d|standard_)[a-z0-9_.-]*\b", normalized)
+        if instance_match and instance_match.group(0) not in {"aws_instance", "s3", "var.ami_id"}:
+            params["instance_type"] = instance_match.group(0)
+
+        ami_match = re.search(r"\bami-[a-f0-9]+\b", normalized)
+        if ami_match:
+            params["ami_id"] = ami_match.group(0)
+
+        owner_match = re.search(r"\bowner\s*(?:is|=|:)\s*([a-zA-Z0-9_-]+)", query, re.IGNORECASE)
+        if owner_match:
+            params["owner"] = owner_match.group(1).lower()
+        else:
+            owner_by_match = re.search(r"\b(?:owned\s+)?by\s+([a-zA-Z0-9_-]+)", query, re.IGNORECASE)
+            if owner_by_match:
+                params["owner"] = owner_by_match.group(1).lower()
+
+        return params
+
+    async def _extract_parameters_with_slm(self, query: str) -> dict[str, str]:
+        """
+        Use the local SLM only for parameter extraction.
+
+        Generated Terraform still comes from approved Python templates.
+        """
+        if self._slm_service is None or not self._slm_service.available:
+            return {}
+
+        system_prompt = (
+            "You extract Terraform generation parameters for a deterministic template engine. "
+            "Return only compact JSON with keys: provider, resource_type, instance_type, "
+            "ami_id, cidr_block, environment, owner. "
+            "Allowed provider values include aws, azurerm, google, kubernetes, helm, vault, random, local, or null. "
+            "Allowed resource_type values include vpc, instance, storage, webapp, storage_webapp, database, "
+            "security_group, deployment, namespace, release, secret, file, password, or explicit provider resource suffixes. "
+            "Use null for unknown values. Do not write Terraform code."
+        )
+        prompt = (
+            f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+            f"<|im_start|>user\n{query}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
+        )
+        try:
+            slm_result = await self._slm_service.generate_text(
+                prompt,
+                max_tokens=180,
+                temperature=0.0,
+                stop=["<|im_end|>", "<|endoftext|>"],
+            )
+            return self._parse_slm_parameter_json(slm_result)
+        except Exception as exc:
+            logger.error(f"Failed to extract Terraform parameters via SLM: {exc}")
+            return {}
+
+    def _parse_slm_parameter_json(self, text: str) -> dict[str, str]:
+        """Parse and constrain the SLM's JSON extraction response."""
+        if not text:
+            return {}
+
+        json_text = text.strip()
+        if json_text.startswith("```"):
+            json_text = re.sub(r"^```(?:json)?", "", json_text, flags=re.IGNORECASE).strip()
+            json_text = re.sub(r"```$", "", json_text).strip()
+
+        json_start = json_text.find("{")
+        json_end = json_text.rfind("}")
+        if json_start == -1 or json_end == -1:
+            return {}
+
+        allowed_keys = {
+            "provider",
+            "resource_type",
+            "instance_type",
+            "ami_id",
+            "cidr_block",
+            "environment",
+            "owner",
+        }
+        raw_params: dict[str, Any] = json.loads(json_text[json_start:json_end + 1])
+        params: dict[str, str] = {}
+        for key, value in raw_params.items():
+            if key not in allowed_keys or value is None:
+                continue
+            text_value = str(value).strip()
+            if text_value in {"", "null", "None"}:
+                continue
+            params[key] = text_value
+        return params

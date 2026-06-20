@@ -99,9 +99,85 @@ class AnsibleAgent(IAgent):
         query = ctx.get("query", "")
 
         if action == "generate":
-            code = AnsibleValidator.generate_playbook(query)
-            generation = AnsibleValidator.describe_generated_playbook(query)
-            pings = AnsibleValidator.get_ping_report("webservers")
+            import re
+            
+            # 1. Fallback regex parsing logic
+            params = {}
+            normalized = query.lower()
+            
+            # Extract target hosts
+            hosts_match = re.search(r'hosts?\s*(?:is|=|\s+to\s+|\s+on\s+)\s*([a-zA-Z0-9_-]+)', normalized)
+            if hosts_match:
+                params["hosts"] = hosts_match.group(1)
+            elif "on " in normalized:
+                hosts_on_match = re.search(r'on\s+([a-zA-Z0-9_-]+)', normalized)
+                if hosts_on_match:
+                    params["hosts"] = hosts_on_match.group(1)
+
+            # Extract environment
+            for env in ["development", "production", "staging", "testing", "dev", "prod"]:
+                if env in normalized:
+                    params["environment"] = env
+                    break
+                    
+            # Extract Owner
+            owner_match = re.search(r'owner\s*(?:is|=|\s+by\s+)\s*([a-zA-Z0-9_-]+)', normalized)
+            if owner_match:
+                params["owner"] = owner_match.group(1)
+            elif "by " in normalized:
+                owner_by_match = re.search(r'by\s+([a-zA-Z0-9_-]+)', normalized)
+                if owner_by_match:
+                    params["owner"] = owner_by_match.group(1)
+
+            # 2. SLM-based extraction (if available)
+            if self._slm_service is not None and self._slm_service.available:
+                system_prompt = (
+                    "You are an enterprise automation architect extraction assistant.\n"
+                    "Analyze the user's request and extract Ansible playbook parameters. "
+                    "Output ONLY a JSON block with keys 'hosts', 'action', 'become', 'environment', 'owner', 'provider'. "
+                    "If a value is not mentioned, use null."
+                )
+                prompt = (
+                    f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+                    f"<|im_start|>user\nRequest: {query}<|im_end|>\n"
+                    f"<|im_start|>assistant\n"
+                )
+                try:
+                    slm_result = await self._slm_service.generate_text(
+                        prompt,
+                        max_tokens=256,
+                        temperature=0.0,
+                        stop=["<|im_end|>", "<|endoftext|>"]
+                    )
+                    if slm_result:
+                        import json
+                        
+                        json_str = slm_result.strip()
+                        # Strip Markdown code blocks if present
+                        if json_str.startswith("```"):
+                            first_newline = json_str.find("\n")
+                            if first_newline != -1:
+                                json_str = json_str[first_newline:]
+                            else:
+                                json_str = json_str[3:]
+                        if json_str.endswith("```"):
+                            json_str = json_str[:-3]
+                            
+                        json_str = json_str.strip()
+                        json_start = json_str.find("{")
+                        json_end = json_str.rfind("}")
+                        if json_start != -1 and json_end != -1:
+                            slm_params = json.loads(json_str[json_start:json_end+1])
+                            for k, v in slm_params.items():
+                                if v is not None and v != "null" and v != "None":
+                                    params[k] = v
+                except Exception as e:
+                    logger.error(f"Failed to extract parameters via SLM: {e}")
+
+            # 3. Generate playbook with parameters
+            code = AnsibleValidator.generate_playbook(query, params)
+            generation = AnsibleValidator.describe_generated_playbook(query, params)
+            pings = AnsibleValidator.get_ping_report(params.get("hosts") or "webservers")
             return {
                 "status": "success",
                 "result": {

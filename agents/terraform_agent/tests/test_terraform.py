@@ -95,6 +95,44 @@ def test_generate_hcl_azure_hub_spoke():
     assert 'resource "azurerm_virtual_network_peering" "spoke_to_hub"' in code
 
 
+def test_generate_hcl_azure_storage_account_and_webapp():
+    """Test generating secure Azure storage account and web app HCL."""
+    params = {
+        "provider": "azure",
+        "resource_type": "storage_webapp",
+    }
+    code = TerraformAuditor.generate_hcl(
+        "generate terraform code for azure storage account and azure webapp",
+        params,
+    )
+    assert 'resource "azurerm_storage_account" "app"' in code
+    assert 'shared_access_key_enabled       = false' in code
+    assert 'public_network_access_enabled   = false' in code
+    assert 'resource "azurerm_service_plan" "app"' in code
+    assert 'resource "azurerm_linux_web_app" "app"' in code
+    assert 'https_only          = true' in code
+    assert 'ftps_state             = "Disabled"' in code
+
+
+def test_generate_hcl_generic_google_storage_scaffold():
+    """Test generating provider-aware scaffold for non-curated Terraform providers."""
+    code = TerraformAuditor.generate_hcl(
+        "generate terraform code for google storage bucket",
+        {"provider": "google", "resource_type": "storage"},
+    )
+    assert 'required_providers' in code
+    assert 'source  = "hashicorp/google"' in code
+    assert 'resource "google_storage_bucket" "storage"' in code
+    assert 'Complete required arguments from the pinned provider documentation before apply.' in code
+
+
+def test_generate_hcl_explicit_provider_resource_scaffold():
+    """Test explicit provider resource names map to provider-aware scaffolds."""
+    code = TerraformAuditor.generate_hcl("generate terraform code for google_sql_database_instance")
+    assert 'source  = "hashicorp/google"' in code
+    assert 'resource "google_sql_database_instance" "database"' in code
+
+
 # ===========================================================================
 # Agent Integration Tests
 # ===========================================================================
@@ -142,6 +180,36 @@ async def test_agent_execute_azure_generation(agent):
     assert 'address_space       = ["10.1.0.0/16"]' in code
     assert 'Environment = "Production"' in code
     assert 'Owner       = "cloud-ops"' in code
+
+
+@pytest.mark.anyio
+async def test_agent_execute_azure_storage_account_and_webapp_generation(agent):
+    """Test executing the Azure storage account and web app prompt."""
+    plan = await agent.plan("generate terraform code for azure storage account and azure webapp", {})
+    result = await agent.execute(plan)
+    assert result["status"] == "success"
+    assert result["result"]["action"] == "generate"
+    assert result["result"]["parameters"]["resource_type"] == "storage_webapp"
+    assert result["result"]["validation"]["status"] == "pass"
+
+    code = result["result"]["code"]
+    assert 'resource "azurerm_storage_account" "app"' in code
+    assert 'resource "azurerm_linux_web_app" "app"' in code
+    assert 'resource "azurerm_linux_virtual_machine" "vm"' not in code
+
+
+@pytest.mark.anyio
+async def test_agent_execute_generic_kubernetes_namespace_generation(agent):
+    """Test generating a provider-aware scaffold for Kubernetes resources."""
+    plan = await agent.plan("generate terraform code for kubernetes namespace", {})
+    result = await agent.execute(plan)
+    assert result["status"] == "success"
+    assert result["result"]["parameters"]["provider"] == "kubernetes"
+    assert result["result"]["parameters"]["resource_type"] == "namespace"
+
+    code = result["result"]["code"]
+    assert 'source  = "hashicorp/kubernetes"' in code
+    assert 'resource "kubernetes_namespace_v1" "namespace"' in code
 
 
 @pytest.mark.anyio

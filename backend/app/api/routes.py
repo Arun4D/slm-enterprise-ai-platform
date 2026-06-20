@@ -565,7 +565,23 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                     normalized_message = request.message.lower()
                     
                     github_keywords = ["github", "actions", "workflow", "runner", "ci/cd", "pipeline", ".github/workflows"]
-                    terraform_keywords = ["terraform", "hcl", "tf plan", "security group", "ingress", "aws_", "module "]
+                    terraform_keywords = [
+                        "terraform",
+                        "hcl",
+                        "tf plan",
+                        "security group",
+                        "ingress",
+                        "aws_",
+                        "azurerm",
+                        "module ",
+                        "resource group",
+                        "vpc",
+                        "vnet",
+                        "subnet",
+                        "ec2",
+                        "iac",
+                        "infrastructure-as-code",
+                    ]
                     ansible_keywords = ["ansible", "playbook", "inventory", "hosts:", "ansible.builtin", "yaml"]
                     snow_keywords = ["servicenow", "snow", "incident", "ticket", "inc", "rca", "resolution", "client", "close notes", "trends", "user", "db"]
                     log_keywords = ["log", "error", "tomcat", "java", "exception", "warn", "parse", "scan", "evtx", "diagnose"]
