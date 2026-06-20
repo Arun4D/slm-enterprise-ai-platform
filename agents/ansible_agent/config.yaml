@@ -17,7 +17,7 @@ rules:
     - ".txt"
   disallowed_tasks:
     - "shell"
-    - "command"  # Discourage shell module over specialized modules
+    - "command"
   force_handlers: true
 generation:
   mode: deterministic_template
@@ -34,3 +34,17 @@ generation:
         - azure_rm_subnet
   orchestrator_model: qwen2.5-coder-1.5b-instruct-gguf
   slm_execution_policy: route_plan_summarize_only
+company_standards:
+  enforce_naming_conventions: true
+  require_task_names: true
+  disallow_shell_commands: true
+  require_become_explicit: true
+  enforce_no_log_for_secrets: true
+  require_tags:
+    - "Environment"
+    - "Owner"
+    - "ManagedBy"
+  allowed_hosts:
+    - "webservers"
+    - "databases"
+    - "localhost"

@@ -15,7 +15,7 @@ guardrails:
     - "Environment"
     - "Owner"
   disallowed_regions:
-    - "us-east-1"  # For demonstration purposes
+    - "us-east-1"
 costs:
   currency: "USD"
   limit_per_month: 500
@@ -26,3 +26,17 @@ generation:
     - encrypted_vpc
   orchestrator_model: qwen2.5-coder-1.5b-instruct-gguf
   slm_execution_policy: route_plan_summarize_only
+company_standards:
+  enforce_tags: true
+  required_tags:
+    - "Environment"
+    - "Owner"
+    - "Project"
+    - "ManagedBy"
+  require_encryption: true
+  enforce_tls: true
+  min_tls_version: "1.2"
+  disallow_public_ingress: true
+  allowed_ingress_cidrs:
+    - "10.0.0.0/8"
+    - "192.168.0.0/16"

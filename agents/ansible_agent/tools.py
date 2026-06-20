@@ -1,8 +1,19 @@
 import logging
+import os
 import re
 from typing import Any
+import yaml
 
 logger = logging.getLogger(__name__)
+
+CONFIG = {}
+try:
+    config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            CONFIG = yaml.safe_load(f) or {}
+except Exception as e:
+    logger.error(f"Failed to load config.yaml in ansible_agent tools: {e}")
 
 MOCK_NODES = {
     "webserver_group": [
@@ -49,16 +60,48 @@ class AnsibleValidator:
         ]
 
     @staticmethod
+    def _generate_common_tags(env: str, owner: str, params: dict | None = None) -> str:
+        """Generate common tags block dynamically from company standards configuration."""
+        if params is None:
+            params = {}
+        standards = CONFIG.get("company_standards", {})
+        required_tags = standards.get("require_tags", ["Environment", "Owner", "ManagedBy"])
+        
+        tags_dict = {}
+        for req_tag in required_tags:
+            req_lower = req_tag.lower()
+            if req_lower == "environment":
+                tags_dict[req_tag] = env
+            elif req_lower == "owner":
+                tags_dict[req_tag] = owner
+            elif req_lower == "managedby":
+                tags_dict[req_tag] = "Ansible"
+            elif req_lower == "project":
+                tags_dict[req_tag] = params.get("project") or "Enterprise_AI_Platform"
+            else:
+                tags_dict[req_tag] = params.get(req_lower) or "Standard_Value"
+                
+        lines = [f"      {k}: {v}" for k, v in tags_dict.items()]
+        return "    common_tags:\n" + "\n".join(lines)
+
+    @staticmethod
     def validate_playbook(playbook_text: str) -> dict[str, Any]:
-        """Validate pasted or uploaded Ansible YAML without running Ansible."""
+        """Validate pasted or uploaded Ansible YAML against company standards configuration."""
         findings: list[dict[str, str]] = []
         normalized = playbook_text.lower()
+        
+        standards = CONFIG.get("company_standards", {})
+        require_task_names = standards.get("require_task_names", True)
+        disallow_shell = standards.get("disallow_shell_commands", True)
+        require_become = standards.get("require_become_explicit", True)
+        enforce_no_log = standards.get("enforce_no_log_for_secrets", True)
+        required_tags = standards.get("require_tags", ["Environment", "Owner"])
 
         if not re.search(r"^\s*-\s+hosts\s*:", playbook_text, re.MULTILINE):
             findings.append({
                 "severity": "high",
                 "rule": "missing_hosts",
-                "message": "Playbook does not define a `hosts` target.",
+                "message": "Playbook does not define a target `hosts` at play level.",
                 "remediation": "Add `- hosts: <group>` at the play level.",
             })
         if "tasks:" not in normalized:
@@ -68,13 +111,16 @@ class AnsibleValidator:
                 "message": "Playbook does not define a `tasks:` section.",
                 "remediation": "Add a tasks list with named idempotent modules.",
             })
-        if re.search(r"ansible\.builtin\.(shell|command)\s*:", normalized) or re.search(r"^\s*(shell|command)\s*:", normalized, re.MULTILINE):
-            findings.append({
-                "severity": "medium",
-                "rule": "raw_shell_command",
-                "message": "Playbook uses shell/command modules, which are harder to make idempotent.",
-                "remediation": "Use purpose-built modules from the official Ansible Collections (e.g. package, service, file, template, user, copy). See documentation: https://docs.ansible.com/projects/ansible/latest/collections/index_module.html",
-            })
+            
+        if disallow_shell:
+            if re.search(r"ansible\.builtin\.(shell|command)\s*:", normalized) or re.search(r"^\s*(shell|command)\s*:", normalized, re.MULTILINE):
+                findings.append({
+                    "severity": "medium",
+                    "rule": "raw_shell_command",
+                    "message": "Playbook uses raw shell/command modules, which violates company standards.",
+                    "remediation": "Use purpose-built modules from the official Ansible Collections (e.g. package, service, file, template, user, copy). See documentation: https://docs.ansible.com/projects/ansible/latest/collections/index_module.html",
+                })
+                
         if re.search(r"\b(apt|yum|dnf|package)\s*:", normalized) and "state:" not in normalized:
             findings.append({
                 "severity": "medium",
@@ -82,13 +128,16 @@ class AnsibleValidator:
                 "message": "Package installation task does not set an explicit state.",
                 "remediation": "Set `state: present`, `latest`, or an approved pinned version policy.",
             })
-        if "become:" not in normalized and any(term in normalized for term in ["package:", "service:", "apt:", "yum:", "dnf:"]):
-            findings.append({
-                "severity": "low",
-                "rule": "missing_become",
-                "message": "Privilege escalation is not explicit for system package/service operations.",
-                "remediation": "Set `become: true` at the play or task level when privileged changes are required.",
-            })
+            
+        if require_become:
+            if "become:" not in normalized and any(term in normalized for term in ["package:", "service:", "apt:", "yum:", "dnf:"]):
+                findings.append({
+                    "severity": "low",
+                    "rule": "missing_become",
+                    "message": "Privilege escalation is not explicit for system package/service operations.",
+                    "remediation": "Set `become: true` at the play or task level when privileged changes are required.",
+                })
+                
         if re.search(r"(password|token|secret)\s*:\s*['\"]?[A-Za-z0-9_\-]{8,}", playbook_text, re.IGNORECASE):
             findings.append({
                 "severity": "critical",
@@ -96,13 +145,24 @@ class AnsibleValidator:
                 "message": "Potential inline secret detected in playbook content.",
                 "remediation": "Move secrets to Ansible Vault or an approved internal secret backend.",
             })
-        if "name:" not in normalized:
-            findings.append({
-                "severity": "low",
-                "rule": "unnamed_tasks",
-                "message": "Playbook lacks descriptive names.",
-                "remediation": "Add `name:` fields to plays and tasks for auditable execution output.",
-            })
+            
+        if enforce_no_log:
+            if any(term in normalized for term in ["password", "token", "secret", "private_key"]) and "no_log: true" not in normalized:
+                findings.append({
+                    "severity": "high",
+                    "rule": "missing_no_log",
+                    "message": "Task processing sensitive variables lacks `no_log: true` protection.",
+                    "remediation": "Add `no_log: true` to the task configuration to prevent credential exposure in execution logs.",
+                })
+                
+        if require_task_names:
+            if "name:" not in normalized:
+                findings.append({
+                    "severity": "low",
+                    "rule": "unnamed_tasks",
+                    "message": "Playbook lacks descriptive task/play names.",
+                    "remediation": "Add `name:` fields to plays and tasks for auditable execution output.",
+                })
 
         return {
             "status": "pass" if not findings else "fail",
@@ -112,8 +172,34 @@ class AnsibleValidator:
         }
 
     @staticmethod
+    def _post_process_playbook(playbook_code: str, env: str, owner: str, params: dict | None = None) -> str:
+        """Replace common_tags block with company standard common_tags."""
+        tags_block = AnsibleValidator._generate_common_tags(env, owner, params)
+        pattern = re.compile(r'common_tags:\s*\n(\s+[A-Za-z0-9_]+:\s*[^\n]+\n*)+', re.DOTALL)
+        return pattern.sub(tags_block + "\n", playbook_code)
+
+    @staticmethod
     def generate_playbook(query: str, params: dict | None = None) -> str:
-        """Generate approved idempotent Ansible playbooks based on parameters."""
+        """Generate approved idempotent Ansible playbooks based on parameters and company standards."""
+        raw_playbook = AnsibleValidator._generate_playbook_raw(query, params)
+        if not params:
+            params = {}
+        env_raw = params.get("environment") or "Production"
+        env_map = {
+            "dev": "Development",
+            "prod": "Production",
+            "staging": "Staging",
+            "testing": "Testing",
+            "development": "Development",
+            "production": "Production"
+        }
+        env = env_map.get(env_raw.lower().strip(), env_raw.strip().capitalize())
+        owner = (params.get("owner") or "Platform_Ops").strip()
+        return AnsibleValidator._post_process_playbook(raw_playbook, env, owner, params)
+
+    @staticmethod
+    def _generate_playbook_raw(query: str, params: dict | None = None) -> str:
+        """Generate raw approved idempotent Ansible playbooks based on parameters."""
         if not params:
             params = {}
             

@@ -94,6 +94,21 @@ def test_validate_playbook_shell_warning():
     assert any("https://docs.ansible.com/projects/ansible/latest/collections/index_module.html" in r for r in remediations)
 
 
+def test_validate_playbook_no_log_warning():
+    """Test that validating a playbook with secret/password variables without no_log: true raises a warning."""
+    playbook_content = """
+- hosts: all
+  name: Configure database
+  tasks:
+    - name: Set db password variable
+      ansible.builtin.set_fact:
+        db_password: "supersecretpassword"
+    """
+    result = AnsibleValidator.validate_playbook(playbook_content)
+    assert result["status"] == "fail"
+    assert any(finding["rule"] == "missing_no_log" for finding in result["findings"])
+
+
 # ===========================================================================
 # Agent Integration Tests
 # ===========================================================================

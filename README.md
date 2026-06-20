@@ -417,6 +417,20 @@ slm-enterprise-ai-platform/
 - ✅ Path allowlisting
 - ✅ Error taxonomy
 
+## 🤖 Custom Company Standards Compliance Engine
+The Terraform and Ansible agents have been redesigned to enforce strict company-specific guidelines during code generation and validation. Both agents read configuration directly from their respective `config.yaml` to dynamically adjust rule sets.
+
+### Terraform Agent Guardrails
+- **Dynamic Tag Injection**: Merges custom configuration parameters (`Environment`, `Owner`, `Project`, `ManagedBy`) and injects them automatically via a post-processing HCL compiler.
+- **Port Restrictions**: Prohibits public ingress (`0.0.0.0/0`) on administrative ports (22, 3389).
+- **TLS Configuration**: Demands minimum TLS version `1.2` for web apps and redirects plaintext HTTP listener access to HTTPS.
+- **Data Protection**: Mandates storage device encryption (`encrypted = true`) for block devices.
+
+### Ansible Agent Guardrails
+- **Auditable Tasks**: Prevents silent execution by requiring descriptive `name:` properties for all plays and tasks.
+- **Declarative Tasks**: Flags and warns against the use of raw command execution modules (`shell` or `command`), preferring idempotent package/service equivalents.
+- **Log Sanitation**: Warns if sensitive credentials (e.g. `password`, `token`, `secret`) are processed without `no_log: true` enabled.
+
 ---
 
 ## 📊 Build Statistics

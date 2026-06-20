@@ -300,3 +300,24 @@ A complete enterprise-grade internal SLM AI Agent Platform blueprint and impleme
 “Internal ChatGPT for DevOps, Automation, and IT Operations.”
 
 Build with production mindset.
+
+
+# COMPANY STANDARDS COMPLIANCE & CUSTOMIZATION ENGINE:
+Both Terraform and Ansible agents feature a configuration-driven **Company Standards Customization Engine** that allows DevOps and security teams to align code generation and validation rules to strict enterprise policies.
+
+## 1. Terraform Agent Customization
+Configured in [config.yaml](file:///home/arun/Workspace/arun4d_github/slm-enterprise-ai-platform/agents/terraform_agent/config.yaml) under `company_standards`:
+- **Enforced Tags**: Validates that S3 buckets, EC2 instances, resource groups, databases, and vnets contain all required company tags (e.g. `Environment`, `Owner`, `Project`, `ManagedBy`).
+- **Dynamic Tag Generation**: Replaces template tag definitions dynamically using a regex-based post-processor wrapper (`_post_process_tags`), ensuring all generated HCL is automatically tagged.
+- **Port Ingress Limits**: Prohibits public administrative access on ports `22` and `3389` from `0.0.0.0/0`.
+- **Encryption Policies**: Demands storage volume and block device encryption (`encrypted = true`).
+- **TLS Version Enforcement**: Checks and flags plaintext port `80` listener access without redirection or minimal TLS version `1.2`.
+
+## 2. Ansible Agent Customization
+Configured in [config.yaml](file:///home/arun/Workspace/arun4d_github/slm-enterprise-ai-platform/agents/ansible_agent/config.yaml) under `company_standards`:
+- **Task Naming Policy**: Requires every task to have a descriptive `name:` for clean logs and execution logs audits.
+- **Forbidden Raw Shell Modules**: Checks and flags the use of `shell` or `command` modules, steering operators to use idempotent modules.
+- **Explicit Privilege Escalation**: Asserts the explicit use of `become` directives for system configurations.
+- **Log Exposure Protection**: Detects variables containing secrets (like password/token) and alerts if they lack the `no_log: true` safety flag to prevent credential leaks.
+- **Metadata Tagging**: Configures default metadata tags under `common_tags:` for all playbooks.
+

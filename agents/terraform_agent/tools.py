@@ -1,8 +1,19 @@
 import logging
+import os
 import re
 from typing import Any
+import yaml
 
 logger = logging.getLogger(__name__)
+
+CONFIG = {}
+try:
+    config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            CONFIG = yaml.safe_load(f) or {}
+except Exception as e:
+    logger.error(f"Failed to load config.yaml in terraform_agent tools: {e}")
 
 MOCK_PLANS = {
     "insecure_sg": {
@@ -112,10 +123,43 @@ class TerraformAuditor:
             }
 
     @staticmethod
+    def _generate_tags_block(env: str, owner: str, params: dict | None = None) -> str:
+        """Generate tags block dynamically from company standards configuration."""
+        if params is None:
+            params = {}
+        standards = CONFIG.get("company_standards", {})
+        required_tags = standards.get("required_tags", ["Environment", "Owner", "ManagedBy"])
+        
+        tags_dict = {}
+        for req_tag in required_tags:
+            req_lower = req_tag.lower()
+            if req_lower == "environment":
+                tags_dict[req_tag] = env
+            elif req_lower == "owner":
+                tags_dict[req_tag] = owner
+            elif req_lower == "managedby":
+                tags_dict[req_tag] = "Terraform"
+            elif req_lower == "project":
+                tags_dict[req_tag] = params.get("project") or "Enterprise_AI_Platform"
+            else:
+                tags_dict[req_tag] = params.get(req_lower) or "Standard_Value"
+                
+        lines = [f"    {k.ljust(11)} = \"{v}\"" for k, v in tags_dict.items()]
+        return "  tags = {\n" + "\n".join(lines) + "\n  }"
+
+    @staticmethod
     def validate_hcl(hcl_text: str) -> dict[str, Any]:
-        """Validate Terraform HCL or plan text without executing Terraform."""
+        """Validate Terraform HCL or plan text against company standards configuration."""
         findings: list[dict[str, str]] = []
         normalized = hcl_text.lower()
+        
+        standards = CONFIG.get("company_standards", {})
+        enforce_tags = standards.get("enforce_tags", True)
+        required_tags = standards.get("required_tags", ["Environment", "Owner"])
+        require_encryption = standards.get("require_encryption", True)
+        enforce_tls = standards.get("enforce_tls", True)
+        min_tls = standards.get("min_tls_version", "1.2")
+        disallow_public_ingress = standards.get("disallow_public_ingress", True)
 
         if not re.search(r'\b(resource|module|data)\s+"', hcl_text):
             findings.append({
@@ -124,43 +168,52 @@ class TerraformAuditor:
                 "message": "No Terraform resource/module/data blocks were detected.",
                 "remediation": "Upload a `.tf` file or paste HCL/plan content that includes Terraform blocks.",
             })
-        if re.search(r'cidr_blocks\s*=\s*\[[^\]]*"0\.0\.0\.0/0"', hcl_text) and re.search(r'from_port\s*=\s*(22|3389)', hcl_text):
-            findings.append({
-                "severity": "critical",
-                "rule": "public_admin_ingress",
-                "message": "Public ingress is open to an administrative port.",
-                "remediation": "Restrict SSH/RDP to corporate VPN or bastion CIDRs.",
-            })
-        if re.search(r'from_port\s*=\s*80', hcl_text) and 'aws_lb_listener' not in normalized and '443' not in normalized:
-            findings.append({
-                "severity": "medium",
-                "rule": "plain_http_exposure",
-                "message": "Port 80 exposure appears without an HTTPS listener or redirect.",
-                "remediation": "Prefer TLS on 443 and redirect HTTP to HTTPS at the load balancer.",
-            })
-        if 'encrypted = true' not in normalized and any(term in normalized for term in ['aws_instance', 'aws_ebs_volume', 'root_block_device']):
-            findings.append({
-                "severity": "high",
-                "rule": "missing_storage_encryption",
-                "message": "Compute/storage resources do not clearly enable encryption.",
-                "remediation": "Set `encrypted = true` for EBS/root block devices and use approved KMS keys where required.",
-            })
-        if 'tags' not in normalized:
-            findings.append({
-                "severity": "medium",
-                "rule": "missing_tags_block",
-                "message": "No tags block detected.",
-                "remediation": "Add mandatory tags such as Environment, Owner, CostCenter, and ManagedBy.",
-            })
-        else:
-            for required_tag in ["environment", "owner"]:
-                if required_tag not in normalized:
-                    findings.append({
-                        "severity": "medium",
-                        "rule": f"missing_{required_tag}_tag",
-                        "message": f"Mandatory tag `{required_tag.title()}` is missing.",
-                        "remediation": f"Add `{required_tag.title()}` to every resource tags block or module tag map.",
-                    })
+            
+        if disallow_public_ingress:
+            if re.search(r'cidr_blocks\s*=\s*\[[^\]]*"0\.0\.0\.0/0"', hcl_text) and re.search(r'from_port\s*=\s*(22|3389)', hcl_text):
+                findings.append({
+                    "severity": "critical",
+                    "rule": "public_admin_ingress",
+                    "message": "Public ingress is open to administrative ports (22/3389). This violates company standards.",
+                    "remediation": "Restrict SSH/RDP to corporate VPN blocks or bastion CIDRs.",
+                })
+                
+        if enforce_tls:
+            if re.search(r'from_port\s*=\s*80', hcl_text) and 'aws_lb_listener' not in normalized and '443' not in normalized:
+                findings.append({
+                    "severity": "medium",
+                    "rule": "plain_http_exposure",
+                    "message": "Port 80 exposure appears without HTTPS/TLS configuration.",
+                    "remediation": f"Prefer TLS on port 443 and enforce min TLS version {min_tls}.",
+                })
+                
+        if require_encryption:
+            if 'encrypted = true' not in normalized and any(term in normalized for term in ['aws_instance', 'aws_ebs_volume', 'root_block_device']):
+                findings.append({
+                    "severity": "high",
+                    "rule": "missing_storage_encryption",
+                    "message": "Compute/storage resources do not clearly enable storage-at-rest encryption.",
+                    "remediation": "Set `encrypted = true` for volume/storage blocks and configure approved encryption keys.",
+                })
+                
+        if enforce_tags:
+            if 'tags' not in normalized:
+                findings.append({
+                    "severity": "medium",
+                    "rule": "missing_tags_block",
+                    "message": "Resource tags block is missing.",
+                    "remediation": f"Add the resource tags block containing required company tags: {', '.join(required_tags)}.",
+                })
+            else:
+                for req_tag in required_tags:
+                    if req_tag.lower() not in normalized:
+                        findings.append({
+                            "severity": "medium",
+                            "rule": f"missing_{req_tag.lower()}_tag",
+                            "message": f"Mandatory company standard tag '{req_tag}' is missing from the resource.",
+                            "remediation": f"Define the '{req_tag}' tag in your resource tags configuration.",
+                        })
+
         if re.search(r'(access_key|secret_key)\s*=', hcl_text, re.IGNORECASE):
             findings.append({
                 "severity": "critical",
@@ -177,8 +230,34 @@ class TerraformAuditor:
         }
 
     @staticmethod
+    def _post_process_tags(hcl: str, env: str, owner: str, params: dict | None = None) -> str:
+        """Replace all tags = { ... } blocks with the company standard tags block."""
+        tags_block = TerraformAuditor._generate_tags_block(env, owner, params)
+        pattern = re.compile(r'tags\s*=\s*\{[^\}]*\}', re.DOTALL)
+        return pattern.sub(tags_block, hcl)
+
+    @staticmethod
     def generate_hcl(query: str, params: dict | None = None) -> str:
-        """Generate approved Terraform HCL starter blocks based on parameters."""
+        """Generate approved Terraform HCL starter blocks based on parameters and company standards."""
+        raw_hcl = TerraformAuditor._generate_hcl_raw(query, params)
+        if not params:
+            params = {}
+        env_raw = params.get("environment") or "Production"
+        env_map = {
+            "dev": "Development",
+            "prod": "Production",
+            "staging": "Staging",
+            "testing": "Testing",
+            "development": "Development",
+            "production": "Production"
+        }
+        env = env_map.get(env_raw.lower().strip(), env_raw.strip().capitalize())
+        owner = (params.get("owner") or "Platform_Ops").strip()
+        return TerraformAuditor._post_process_tags(raw_hcl, env, owner, params)
+
+    @staticmethod
+    def _generate_hcl_raw(query: str, params: dict | None = None) -> str:
+        """Generate raw Terraform HCL starter blocks based on parameters."""
         if not params:
             params = {}
             
