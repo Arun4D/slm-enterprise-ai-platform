@@ -46,6 +46,21 @@ def test_generate_playbook_custom():
     assert 'ansible.builtin.package' in code
 
 
+def test_generate_playbook_dynamic_package():
+    """Test generating a dynamic playbook for a custom package (e.g. apache2)."""
+    params = {
+        "package_name": "apache2",
+        "service_name": "apache2",
+        "service_state": "started",
+        "hosts": "webservers"
+    }
+    code = AnsibleValidator.generate_playbook("install apache2", params)
+    assert 'Ensure apache2 is installed' in code
+    assert 'name: apache2' in code
+    assert 'Ensure apache2 service is started' in code
+    assert 'nginx' not in code.lower()
+
+
 def test_generate_playbook_azure():
     """Test generating Azure network playbook with custom tags."""
     params = {

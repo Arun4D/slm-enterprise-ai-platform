@@ -180,7 +180,7 @@ class AnsibleValidator:
                 f"        address_prefix: \"{{{{ item.address_prefix }}}}\"\n"
                 f"      loop: \"{{{{ subnets }}}}\"\n"
             )
-        if "update" in normalized or "patch" in normalized:
+        if "update" in normalized or "patch" in normalized or params.get("action") == "update":
             return (
                 f"---\n"
                 f"- name: Apply safe system package updates\n"
@@ -196,23 +196,44 @@ class AnsibleValidator:
                 f"        name: \"*\"\n"
                 f"        state: latest\n"
             )
-        return (
-            f"---\n"
-            f"- name: Install and configure Nginx webserver\n"
-            f"  hosts: {hosts}\n"
-            f"  become: {become}\n"
-            f"  gather_facts: true\n"
+            
+        package_name = params.get("package_name")
+        service_name = params.get("service_name")
+        service_state = params.get("service_state") or "started"
+        
+        # If no package or service name is extracted, use Nginx as fallback
+        if not package_name and not service_name:
+            package_name = "nginx"
+            service_name = "nginx"
+            
+        playbook_parts = [
+            f"---\n",
+            f"- name: Provision and configure system services\n",
+            f"  hosts: {hosts}\n",
+            f"  become: {become}\n",
+            f"  gather_facts: true\n",
             f"  tasks:\n"
-            f"    - name: Ensure Nginx is installed\n"
-            f"      ansible.builtin.package:\n"
-            f"        name: nginx\n"
-            f"        state: present\n\n"
-            f"    - name: Ensure Nginx service is enabled and running\n"
-            f"      ansible.builtin.service:\n"
-            f"        name: nginx\n"
-            f"        state: started\n"
-            f"        enabled: true\n"
-        )
+        ]
+        
+        if package_name:
+            playbook_parts.append(
+                f"    - name: Ensure {package_name} is installed\n"
+                f"      ansible.builtin.package:\n"
+                f"        name: {package_name}\n"
+                f"        state: present\n\n"
+            )
+            
+        if service_name or package_name:
+            svc = service_name or package_name
+            playbook_parts.append(
+                f"    - name: Ensure {svc} service is {service_state}\n"
+                f"      ansible.builtin.service:\n"
+                f"        name: {svc}\n"
+                f"        state: {service_state}\n"
+                f"        enabled: true\n"
+            )
+            
+        return "".join(playbook_parts)
 
     @staticmethod
     def describe_generated_playbook(query: str, params: dict | None = None) -> dict[str, str]:
@@ -238,7 +259,7 @@ class AnsibleValidator:
                 "verification_note": "Requires `azure.azcollection` and Azure credentials supplied through approved environment variables, managed identity, or enterprise secret injection.",
                 "remediation": "No raw shell commands are used. Network CIDRs, region, resource group, and tags are centralized as variables for review before execution.",
             }
-        if "update" in normalized or "patch" in normalized:
+        if "update" in normalized or "patch" in normalized or params.get("action") == "update":
             return {
                 "template_name": "system_updates",
                 "playbook_name": "system_updates.yml",
@@ -247,11 +268,13 @@ class AnsibleValidator:
                 "verification_note": "Review package version policy before using `state: latest` in production maintenance windows.",
                 "remediation": "Package actions use declarative modules instead of shell commands.",
             }
+            
+        package_name = params.get("package_name") or "nginx"
         return {
-            "template_name": "nginx_webserver",
+            "template_name": f"{package_name}_setup",
             "playbook_name": "site.yml",
-            "title": "Nginx Webserver Provisioning Playbook",
-            "description": f"Generated an idempotent webserver setup playbook targeting hosts '{hosts}' using package and service modules.",
+            "title": f"{package_name.capitalize()} Service Provisioning Playbook",
+            "description": f"Generated an idempotent {package_name} setup playbook targeting hosts '{hosts}' using package and service modules.",
             "verification_note": f"Targets the '{hosts}' inventory group and expects privilege escalation for package/service changes.",
             "remediation": "Raw shell commands are replaced with declarative Ansible modules.",
         }

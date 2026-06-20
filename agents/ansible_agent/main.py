@@ -129,12 +129,22 @@ class AnsibleAgent(IAgent):
                 if owner_by_match:
                     params["owner"] = owner_by_match.group(1)
 
+            # Fallback regex package name extraction
+            pkg_match = re.search(r'(?:install|package|pkg)\s+([a-zA-Z0-9_-]+)', normalized)
+            if pkg_match:
+                params["package_name"] = pkg_match.group(1)
+            
+            # Fallback regex service name extraction
+            srv_match = re.search(r'(?:service|svc|start|stop|restart|enable)\s+([a-zA-Z0-9_-]+)', normalized)
+            if srv_match and srv_match.group(1) not in ["playbook", "ansible"]:
+                params["service_name"] = srv_match.group(1)
+
             # 2. SLM-based extraction (if available)
             if self._slm_service is not None and self._slm_service.available:
                 system_prompt = (
                     "You are an enterprise automation architect extraction assistant.\n"
                     "Analyze the user's request and extract Ansible playbook parameters. "
-                    "Output ONLY a JSON block with keys 'hosts', 'action', 'become', 'environment', 'owner', 'provider'. "
+                    "Output ONLY a JSON block with keys 'hosts', 'action', 'package_name', 'service_name', 'service_state', 'become', 'environment', 'owner', 'provider'. "
                     "If a value is not mentioned, use null."
                 )
                 prompt = (
