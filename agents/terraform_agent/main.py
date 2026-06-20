@@ -197,8 +197,19 @@ class TerraformAgent(IAgent):
         if action == "generate":
             code = data.get("code", "")
             validation = data.get("validation", {})
+            params = data.get("parameters", {})
+            provider = params.get("provider") or "AWS"
+            resource_type = params.get("resource_type") or "Resource"
+            
+            provider_str = "Azure" if "azure" in str(provider).lower() else "AWS" if "aws" in str(provider).lower() else str(provider).strip().upper()
+            resource_str = str(resource_type).strip().replace("_", " ").title()
+            if resource_str == "Vpc":
+                resource_str = "VPC / VNet"
+            elif resource_str == "Instance":
+                resource_str = "Compute Instance"
+
             summary = (
-                f"### Terraform Infrastructure HCL Code Generator\n\n"
+                f"### 🛠️ {provider_str} {resource_str} Terraform HCL Generator\n\n"
                 f"I have generated compliant, highly secure Terraform HCL resources containing mandatory tags and encrypted storage guardrails:\n\n"
                 f"```hcl\n"
                 f"{code}"
@@ -220,7 +231,7 @@ class TerraformAgent(IAgent):
             ) or "- No Terraform guardrail violations detected."
             file_note = ", ".join(files) if files else "pasted chat text"
             return (
-                "### Terraform HCL / Plan Validation\n\n"
+                "### 🛡️ Terraform HCL / Plan Validation\n\n"
                 f"**Input source**: {file_note}\n\n"
                 f"**Status**: `{validation.get('status')}` with `{validation.get('finding_count', 0)}` finding(s)\n\n"
                 "#### Guardrail Findings\n"
@@ -241,7 +252,7 @@ class TerraformAgent(IAgent):
                 violations_md = "- **No compliance violations detected**."
 
             summary = (
-                f"### Terraform Infrastructure-as-Code Audit\n\n"
+                f"### 🛡️ Terraform Infrastructure-as-Code Audit\n\n"
                 f"| Resource ID | Component Type | Status Level |\n"
                 f"| :--- | :--- | :--- |\n"
                 f"| `{audit.get('resource')}` | `{audit.get('type')}` | **{audit.get('compliance_status')}** |\n\n"

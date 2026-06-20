@@ -218,5 +218,5 @@ async def test_agent_summarize(agent):
     plan = await agent.plan("generate secure vpc in dev", {})
     result = await agent.execute(plan)
     summary = await agent.summarize(result)
-    assert "Terraform Infrastructure HCL Code Generator" in summary
+    assert "Terraform HCL Generator" in summary
     assert "resource \"aws_vpc\"" in summary

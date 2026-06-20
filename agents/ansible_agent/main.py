@@ -250,9 +250,9 @@ class AnsibleAgent(IAgent):
             if failed_host:
                 connection_warning = f"- **Connection Issue (`{failed_host}`)**: Synthetic inventory signal shows {failed_host} failed to respond. Verify SSH/network gateway configuration only if this playbook targets remote hosts."
 
+            title = generation.get('title', 'Generated Ansible Playbook')
             summary = (
-                f"### ⚡ Ansible Playbook Code Generator & Validator\n\n"
-                f"#### {generation.get('title', 'Generated Ansible Playbook')}\n\n"
+                f"### ⚡ {title} Generator & Validator\n\n"
                 f"{generation.get('description', 'Generated an optimized, secure, and idempotent Ansible playbook based on your request.')}\n\n"
                 f"```yaml\n"
                 f"{code}"
@@ -288,7 +288,7 @@ class AnsibleAgent(IAgent):
             )
             file_note = ", ".join(files) if files else "pasted chat text"
             return (
-                "### Ansible Playbook Validation\n\n"
+                "### 🛡️ Ansible Playbook Validation\n\n"
                 f"**Input source**: {file_note}\n\n"
                 f"**Status**: `{validation.get('status')}` with `{validation.get('finding_count', 0)}` finding(s)\n\n"
                 "#### Guardrail Findings\n"
@@ -319,9 +319,10 @@ class AnsibleAgent(IAgent):
             else:
                 remediation_recommendation = "*Remediation recommendation: All target hosts are reachable. Ready for playbook execution.*"
 
+            playbook_name = playbook.get('playbook_name', 'site.yml')
             summary = (
-                f"### ⚡ Ansible Playbook Dry-Run & Inventory Status\n\n"
-                f"**Playbook**: `{playbook.get('playbook_name')}` | **Syntax Compliance**: `Valid`\n\n"
+                f"### ⚡ {playbook_name} Playbook Dry-Run & Inventory Status\n\n"
+                f"**Playbook**: `{playbook_name}` | **Syntax Compliance**: `Valid`\n\n"
                 f"#### Playbook Lint Warnings:\n"
                 f"{warnings_md}\n\n"
                 f"#### 👥 Inventory Hosts Connectivity Ping Report:\n"

@@ -128,3 +128,14 @@ async def test_agent_execute_generation(agent):
     
     generation = result["result"]["generation"]
     assert "dbservers" in generation["description"]
+
+
+@pytest.mark.anyio
+async def test_agent_summarize(agent):
+    """Test summarizing the generation result in Markdown."""
+    plan = await agent.plan("generate nginx playbook", {})
+    result = await agent.execute(plan)
+    summary = await agent.summarize(result)
+    assert "Generator & Validator" in summary
+    assert "hosts: webservers" in summary
+
