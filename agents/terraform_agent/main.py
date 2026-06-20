@@ -143,29 +143,45 @@ class TerraformAgent(IAgent):
 
             # 2. SLM-based extraction (if available)
             if self._slm_service is not None and self._slm_service.available:
-                prompt = (
+                system_prompt = (
                     "You are an enterprise cloud architect extraction assistant.\n"
                     "Analyze the user's request and extract Terraform parameters. "
                     "Output ONLY a JSON block with keys 'provider', 'resource_type', 'instance_type', 'ami_id', 'cidr_block', 'environment', 'owner'. "
-                    "If a value is not mentioned, use null.\n\n"
-                    f"Request: {query}\n"
-                    "JSON:\n"
+                    "If a value is not mentioned, use null."
+                )
+                prompt = (
+                    f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+                    f"<|im_start|>user\nRequest: {query}<|im_end|>\n"
+                    f"<|im_start|>assistant\n"
                 )
                 try:
                     slm_result = await self._slm_service.generate_text(
                         prompt,
-                        max_tokens=128,
+                        max_tokens=256,
                         temperature=0.0,
-                        stop=["<|end|>", "\n\n"]
+                        stop=["<|im_end|>", "<|endoftext|>"]
                     )
                     if slm_result:
                         import json
-                        json_start = slm_result.find("{")
-                        json_end = slm_result.rfind("}")
+                        
+                        json_str = slm_result.strip()
+                        # Strip Markdown code blocks if present
+                        if json_str.startswith("```"):
+                            first_newline = json_str.find("\n")
+                            if first_newline != -1:
+                                json_str = json_str[first_newline:]
+                            else:
+                                json_str = json_str[3:]
+                        if json_str.endswith("```"):
+                            json_str = json_str[:-3]
+                            
+                        json_str = json_str.strip()
+                        json_start = json_str.find("{")
+                        json_end = json_str.rfind("}")
                         if json_start != -1 and json_end != -1:
-                            slm_params = json.loads(slm_result[json_start:json_end+1])
+                            slm_params = json.loads(json_str[json_start:json_end+1])
                             for k, v in slm_params.items():
-                                if v is not None:
+                                if v is not None and v != "null" and v != "None":
                                     params[k] = v
                 except Exception as e:
                     logger.error(f"Failed to extract parameters via SLM: {e}")

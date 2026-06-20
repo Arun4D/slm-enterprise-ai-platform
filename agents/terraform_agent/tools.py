@@ -135,11 +135,22 @@ class TerraformAuditor:
         owner = owner.strip()
         
         # Extract provider (aws or azure)
-        provider = params.get("provider") or ("azure" if any(kw in query.lower() for kw in ["azure", "azurerm"]) else "aws")
-        provider = provider.strip().lower()
+        provider_raw = params.get("provider") or ""
+        provider_raw = provider_raw.strip().lower()
+        if "azure" in provider_raw or "azurerm" in provider_raw or any(kw in query.lower() for kw in ["azure", "azurerm"]):
+            provider = "azure"
+        else:
+            provider = "aws"
 
         # Extract resource type
-        res_type = params.get("resource_type") or ("vpc" if any(kw in query.lower() for kw in ["vpc", "network", "vnet", "virtual network"]) else "instance")
+        res_type_raw = params.get("resource_type") or ""
+        res_type_raw = res_type_raw.strip().lower()
+        if any(kw in res_type_raw for kw in ["vpc", "network", "vnet", "virtual_network", "resource_group", "subnet"]):
+            res_type = "vpc"
+        elif any(kw in res_type_raw for kw in ["instance", "vm", "virtual_machine", "server"]):
+            res_type = "instance"
+        else:
+            res_type = "vpc" if any(kw in query.lower() for kw in ["vpc", "network", "vnet", "virtual network"]) else "instance"
         
         if provider == "azure":
             is_hub_spoke = "hub" in query.lower() and "spoke" in query.lower()
