@@ -11,8 +11,24 @@ import tempfile
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+# Compatibility imports for Pydantic V1 and V2
+try:
+    from pydantic import field_validator
+    HAS_PYDANTIC_V2 = True
+except ImportError:
+    HAS_PYDANTIC_V2 = False
+    from pydantic import validator
+    def field_validator(*fields, **kwargs):
+        # Translate v2 'mode="before"' to v1 'pre=True'
+        mode = kwargs.pop("mode", "after")
+        pre = (mode == "before")
+        return validator(*fields, pre=pre, **kwargs)
+
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ImportError:
+    from pydantic import BaseSettings
+    SettingsConfigDict = None
 
 ROOT_PATH = Path(__file__).resolve().parents[3]
 
@@ -107,7 +123,13 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+    if SettingsConfigDict is not None:
+        model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+    else:
+        class Config:
+            env_file = ".env"
+            case_sensitive = False
+            extra = "ignore"
 
     @property
     def resolved_file_allowed_paths(self) -> list[str]:
