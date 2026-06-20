@@ -232,17 +232,23 @@ class AnsibleAgent(IAgent):
 
         data = result.get("result", {})
         action = data.get("action", "audit")
+        pings = data.get("pings", [])
+        
+        failed_host = next((p["host"] for p in pings if p["ping_status"] != "Success"), None)
 
         if action == "generate":
             code = data.get("code", "")
             playbook_name = data.get("playbook_name", "site.yml")
             generation = data.get("generation", {})
-            pings = data.get("pings", [])
             
             ping_rows = []
             for p in pings:
                 status_badge = "✅ Success" if p["ping_status"] == "Success" else "❌ Failed"
                 ping_rows.append(f"| {p['host']} | {p['ip']} | {status_badge} | {p['latency_ms']} ms |")
+
+            connection_warning = ""
+            if failed_host:
+                connection_warning = f"- **Connection Issue (`{failed_host}`)**: Synthetic inventory signal shows {failed_host} failed to respond. Verify SSH/network gateway configuration only if this playbook targets remote hosts."
 
             summary = (
                 f"### ⚡ Ansible Playbook Code Generator & Validator\n\n"
@@ -265,12 +271,11 @@ class AnsibleAgent(IAgent):
                 + "\n".join(ping_rows) + "\n\n"
                 f"#### 🔧 Remediation Plan Details:\n"
                 f"- {generation.get('remediation', 'Generated tasks use declarative modules for idempotency.')}\n"
-                f"- **Connection Issue (`web-srv-03`)**: Synthetic inventory signal shows web-srv-03 failed to respond. Verify SSH/network gateway configuration only if this playbook targets remote hosts."
+                + (f"{connection_warning}\n" if connection_warning else "")
             )
             return summary
         elif action == "validate":
             validation = data.get("validation", {})
-            pings = data.get("pings", [])
             files = data.get("uploaded_files", [])
             findings = validation.get("findings", [])
             findings_md = "\n".join(
@@ -295,7 +300,6 @@ class AnsibleAgent(IAgent):
             )
         else:
             playbook = data.get("playbook", {})
-            pings = data.get("pings", [])
 
             ping_rows = []
             for p in pings:
@@ -309,6 +313,12 @@ class AnsibleAgent(IAgent):
             else:
                 warnings_md = "- 🌟 Playbook tasks confirm to target criteria."
 
+            remediation_recommendation = ""
+            if failed_host:
+                remediation_recommendation = f"*Remediation recommendation: SRE {failed_host} failed to respond. Verify SSH network keys and security gateway rules.*"
+            else:
+                remediation_recommendation = "*Remediation recommendation: All target hosts are reachable. Ready for playbook execution.*"
+
             summary = (
                 f"### ⚡ Ansible Playbook Dry-Run & Inventory Status\n\n"
                 f"**Playbook**: `{playbook.get('playbook_name')}` | **Syntax Compliance**: `Valid`\n\n"
@@ -318,6 +328,6 @@ class AnsibleAgent(IAgent):
                 f"| Hostname | Node IP | Status | Latency |\n"
                 f"| :--- | :--- | :--- | :--- |\n"
                 + "\n".join(ping_rows) + "\n\n"
-                f"*Remediation recommendation: SRE web-srv-03 failed to respond. Verify SSH network keys and security gateway rules.*"
+                + remediation_recommendation
             )
             return summary

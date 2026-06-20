@@ -35,7 +35,18 @@ class AnsibleValidator:
     @staticmethod
     def get_ping_report(group_name: str) -> list:
         """Fetch ping stats for targeted hosts."""
-        return MOCK_NODES["webserver_group"]
+        group = str(group_name).strip().lower()
+        if "local" in group:
+            return [
+                {"host": "localhost", "ip": "127.0.0.1", "ping_status": "Success", "latency_ms": 0.1}
+            ]
+        
+        prefix = "db" if "db" in group or "data" in group else "web"
+        return [
+            {"host": f"{prefix}-srv-01", "ip": "10.0.1.10", "ping_status": "Success", "latency_ms": 3.4},
+            {"host": f"{prefix}-srv-02", "ip": "10.0.1.11", "ping_status": "Success", "latency_ms": 4.1},
+            {"host": f"{prefix}-srv-03", "ip": "10.0.1.12", "ping_status": "Failed (Timeout)", "latency_ms": 0.0}
+        ]
 
     @staticmethod
     def validate_playbook(playbook_text: str) -> dict[str, Any]:
