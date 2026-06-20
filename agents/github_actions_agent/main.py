@@ -197,7 +197,7 @@ class GitHubActionsAgent(IAgent):
                 f"| **Workflow Profile** | `{data.get('profile')}` |\n"
                 f"| **Runner OS** | `{diag.get('runner_os')}` |\n"
                 f"| **Detected Error Details** | *{diag.get('error_details')}* |\n\n"
-                f"#### 🔧 Recommended Pipeline Repair Strategy\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> {diag.get('suggested_action')}\n\n"
                 f"*Tips: You can enable verbose debugging on your GitHub repository by setting the repository secret `ACTIONS_RUNNER_DEBUG=true`.*"
             )

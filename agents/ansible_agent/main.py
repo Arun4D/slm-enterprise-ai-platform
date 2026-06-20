@@ -293,7 +293,7 @@ class AnsibleAgent(IAgent):
                 f"**Status**: `{validation.get('status')}` with `{validation.get('finding_count', 0)}` finding(s)\n\n"
                 "#### Guardrail Findings\n"
                 f"{findings_md}\n\n"
-                "#### Inventory Connectivity Signal\n"
+                "#### 👥 Inventory Hosts Connectivity Ping Report:\n"
                 "| Hostname | Node IP | Status | Latency |\n"
                 "| :--- | :--- | :--- | :--- |\n"
                 f"{ping_rows}"

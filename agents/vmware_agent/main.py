@@ -185,7 +185,7 @@ class VMwareAgent(IAgent):
                 f"- **Allocated Cluster RAM**: `{op_data.get('allocated_memory_gb')} GB` ({op_data.get('memory_usage_percent')}% utilization)\n\n"
                 f"#### CPU/Memory Violations & Alerts:\n"
                 f"{violations_md}\n\n"
-                f"#### 🔧 Remediation Plan:\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> Since vCPU overcommit exceeds the recommended 4.0:1 threshold, limit provisioning of new VMs or expand hypervisor nodes cluster count."
             )
             return summary
@@ -230,7 +230,7 @@ class VMwareAgent(IAgent):
                 + "\n".join(ds_rows) + "\n\n"
                 f"#### 🚨 Critical Usage Alerts:\n"
                 f"{violations_md}\n\n"
-                f"#### 🔧 Storage Optimization Suggestion:\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> SSD Datastore `ds_ssd_01` is heavily loaded. Initiate vMotion migrations to migrate lower priority virtual disk files to `ds_sata_02`."
             )
             return summary
@@ -259,7 +259,7 @@ class VMwareAgent(IAgent):
             f"| Datastore Name | Storage Type | Capacity | Space Used | Status Badge |\n"
             f"| :--- | :--- | :--- | :--- | :--- |\n"
             + "\n".join(ds_rows) + "\n\n"
-            f"#### 🔧 Virtualization Remediation Suggestions:\n"
+            f"#### 🔧 Remediation Plan Details:\n"
             f"> SSD Datastore `ds_ssd_01` has breached the 85% safe allocation limit. Trigger VM storage migrations (vMotion) to migrate workloads."
         )
         return summary

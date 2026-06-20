@@ -187,7 +187,7 @@ class NutanixAgent(IAgent):
                 f"- **Allocated RAM Pool**: `{op_data.get('allocated_memory_gb')} GB` ({op_data.get('memory_usage_percent')}% utilization)\n\n"
                 f"#### Resiliency & Threshold Violations:\n"
                 f"{violations_md}\n\n"
-                f"#### 🔧 Remediation Plan:\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> Ensure high resiliency workloads are upgraded to Replication Factor 3 (RF3) if critical storage performance is required."
             )
             return summary
@@ -229,7 +229,7 @@ class NutanixAgent(IAgent):
                 + "\n".join(pool_rows) + "\n\n"
                 f"#### 🚨 Critical HCI Usage Alerts:\n"
                 f"{violations_md}\n\n"
-                f"#### 🔧 Storage Optimization Suggestion:\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> Storage pool `sp_hdd_02` has breached 80% safety. Enable Nutanix compression/deduplication or trigger snapshots cleanup."
             )
             return summary
@@ -258,7 +258,7 @@ class NutanixAgent(IAgent):
             f"| Storage Pool Name | Performance Tier | Capacity | Space Used | Status Badge |\n"
             f"| :--- | :--- | :--- | :--- | :--- |\n"
             + "\n".join(pool_rows) + "\n\n"
-            f"#### 🔧 Resiliency Remediation Suggestions:\n"
+            f"#### 🔧 Remediation Plan Details:\n"
             f"> Storage pool `sp_hdd_02` has breached the 80% HCI safety threshold. Trigger data compression or clean up orphaned snapshots."
         )
         return summary

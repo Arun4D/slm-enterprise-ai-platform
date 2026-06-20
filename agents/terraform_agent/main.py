@@ -258,7 +258,7 @@ class TerraformAgent(IAgent):
                 f"| `{audit.get('resource')}` | `{audit.get('type')}` | **{audit.get('compliance_status')}** |\n\n"
                 f"#### Compliance Findings:\n"
                 f"{violations_md}\n\n"
-                f"#### 🔧 Recommended Mitigation Steps:\n"
+                f"#### 🔧 Remediation Plan Details:\n"
                 f"> {audit.get('remediation')}\n"
             )
             return summary

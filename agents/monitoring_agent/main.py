@@ -99,7 +99,7 @@ class MonitoringAgent(IAgent):
             f"| Affected Service | Performance Metric | Severity | Value |\n"
             f"| :--- | :--- | :--- | :--- |\n"
             + "\n".join(alert_rows) + "\n\n"
-            f"#### 🔧 Observability Remediation Plan:\n"
+            f"#### 🔧 Remediation Plan Details:\n"
             f"> Memory threshold has breached 90%. Schedule immediate microservice replicas recycling or scale vertical host RAM partitions to avoid out-of-memory container crashes."
         )
         return summary
