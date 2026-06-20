@@ -251,6 +251,11 @@ class AnsibleAgent(IAgent):
                 connection_warning = f"- **Connection Issue (`{failed_host}`)**: Synthetic inventory signal shows {failed_host} failed to respond. Verify SSH/network gateway configuration only if this playbook targets remote hosts."
 
             title = generation.get('title', 'Generated Ansible Playbook')
+            ping_table = "\n".join(ping_rows)
+            remediation_details = f"- {generation.get('remediation', 'Generated tasks use declarative modules for idempotency.')}"
+            if connection_warning:
+                remediation_details += f"\n{connection_warning}"
+
             summary = (
                 f"### ⚡ {title} Generator & Validator\n\n"
                 f"{generation.get('description', 'Generated an optimized, secure, and idempotent Ansible playbook based on your request.')}\n\n"
@@ -268,10 +273,9 @@ class AnsibleAgent(IAgent):
                 f"#### 👥 Inventory Hosts Connectivity Ping Report:\n"
                 f"| Hostname | Node IP | Status | Latency |\n"
                 f"| :--- | :--- | :--- | :--- |\n"
-                + "\n".join(ping_rows) + "\n\n"
+                f"{ping_table}\n\n"
                 f"#### 🔧 Remediation Plan Details:\n"
-                f"- {generation.get('remediation', 'Generated tasks use declarative modules for idempotency.')}\n"
-                + (f"{connection_warning}\n" if connection_warning else "")
+                f"{remediation_details}"
             )
             return summary
         elif action == "validate":
@@ -320,6 +324,7 @@ class AnsibleAgent(IAgent):
                 remediation_recommendation = "*Remediation recommendation: All target hosts are reachable. Ready for playbook execution.*"
 
             playbook_name = playbook.get('playbook_name', 'site.yml')
+            ping_table = "\n".join(ping_rows)
             summary = (
                 f"### ⚡ {playbook_name} Playbook Dry-Run & Inventory Status\n\n"
                 f"**Playbook**: `{playbook_name}` | **Syntax Compliance**: `Valid`\n\n"
@@ -328,7 +333,7 @@ class AnsibleAgent(IAgent):
                 f"#### 👥 Inventory Hosts Connectivity Ping Report:\n"
                 f"| Hostname | Node IP | Status | Latency |\n"
                 f"| :--- | :--- | :--- | :--- |\n"
-                + "\n".join(ping_rows) + "\n\n"
-                + remediation_recommendation
+                f"{ping_table}\n\n"
+                f"{remediation_recommendation}"
             )
             return summary
