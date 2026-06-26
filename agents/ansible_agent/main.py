@@ -203,19 +203,25 @@ class AnsibleAgent(IAgent):
                     logger.error(f"Failed to extract parameters via SLM: {e}")
 
             # 3. Generate playbook with parameters
-            code = AnsibleValidator.generate_playbook(query, params)
-            generation = AnsibleValidator.describe_generated_playbook(query, params)
-            pings = AnsibleValidator.get_ping_report(params.get("hosts") or "webservers")
-            return {
-                "status": "success",
-                "result": {
-                    "action": "generate",
-                    "code": code,
-                    "playbook_name": generation["playbook_name"],
-                    "generation": generation,
-                    "pings": pings
+            try:
+                code = AnsibleValidator.generate_playbook(query, params)
+                generation = AnsibleValidator.describe_generated_playbook(query, params)
+                pings = AnsibleValidator.get_ping_report(params.get("hosts") or "webservers")
+                return {
+                    "status": "success",
+                    "result": {
+                        "action": "generate",
+                        "code": code,
+                        "playbook_name": generation["playbook_name"],
+                        "generation": generation,
+                        "pings": pings
+                    }
                 }
-            }
+            except Exception as e:
+                return {
+                    "status": "failed",
+                    "error": str(e)
+                }
         elif action == "validate":
             code_text = ctx.get("code_text", "")
             validation = AnsibleValidator.validate_playbook(code_text)

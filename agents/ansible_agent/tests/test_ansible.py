@@ -247,3 +247,19 @@ def test_dynamic_scraper_offline(monkeypatch):
     assert schema["optional_field"]["required"] is False
 
 
+def test_generate_invalid_module_raises_error():
+    """Test that requesting a non-existent module raises ValueError."""
+    with pytest.raises(ValueError) as excinfo:
+        AnsibleValidator.generate_playbook("generate ansible code for cpm_time_config")
+    assert "No such ansible module exists: cpm_time_config" in str(excinfo.value)
+
+
+@pytest.mark.anyio
+async def test_agent_execute_invalid_module_returns_failed(agent):
+    """Test that executing a plan for an invalid module returns a failed status JSON."""
+    plan = await agent.plan("generate ansible code for cpm_time_config", {})
+    result = await agent.execute(plan)
+    assert result["status"] == "failed"
+    assert "No such ansible module exists: cpm_time_config" in result["error"]
+
+

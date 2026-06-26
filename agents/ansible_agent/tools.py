@@ -286,6 +286,8 @@ class AnsibleValidator:
                     f"  tasks:\n"
                     f"{task_block}\n"
                 )
+            else:
+                raise ValueError(f"No such ansible module exists: {module_name}")
             
         # Extract provider
         provider = params.get("provider") or ""
@@ -606,21 +608,35 @@ class AnsibleValidator:
         import re
         normalized = query.lower()
         
-        # Look for FQCN patterns: A.B.C (e.g. azure.azcollection.azure_rm_virtualnetwork)
-        fqcn_match = re.search(r'\b([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b', query)
+        # 1. Look for FQCN patterns: A.B.C (e.g. azure.azcollection.azure_rm_virtualnetwork)
+        fqcn_match = re.search(r'\b([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)+)\b', query)
         if fqcn_match:
             return fqcn_match.group(1)
             
-        # Look for phrases like "copy module" or "template module"
-        module_phrase_match = re.search(r'\b([a-zA-Z0-9_-]+)\s+module\b', normalized)
-        if module_phrase_match:
-            name = module_phrase_match.group(1)
-            # Map common short names
-            if name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]:
-                return f"ansible.builtin.{name}"
-            return name
+        # 2. Look for phrases like "for <module>", "using <module>", "use <module>"
+        match_phrase = re.search(
+            r'\b(?:for|using|use|configure|run|execute|with)\s+([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*)\b', 
+            normalized
+        )
+        if match_phrase:
+            name = match_phrase.group(1)
+            # Make sure it's not a generic word
+            if name not in ["playbook", "ansible", "code", "task", "hosts", "variables", "module", "system"]:
+                # Apply heuristic to identify if it is a module name:
+                # - contains a dot (e.g. ansible.builtin.copy)
+                # - contains an underscore (e.g. cpm_time_config, azure_rm_virtualnetwork)
+                # - matches a known standard short module name
+                is_module = (
+                    "." in name or 
+                    "_" in name or 
+                    name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]
+                )
+                if is_module:
+                    if "." not in name and name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]:
+                        return f"ansible.builtin.{name}"
+                    return name
             
-        # Check standard short name lists directly in query word boundaries
+        # 3. Check standard short name lists directly in query word boundaries
         for name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]:
             if re.search(r'\b' + name + r'\b', normalized):
                 return f"ansible.builtin.{name}"
