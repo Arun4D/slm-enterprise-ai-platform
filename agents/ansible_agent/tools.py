@@ -227,6 +227,65 @@ class AnsibleValidator:
             become = "true"
         else:
             become = "true" if str(become_val).lower() in ["true", "yes", "1"] else "false"
+
+        # Check if an explicit module is targeted
+        module_name = AnsibleValidator._extract_module_name(query)
+        if module_name:
+            import json
+            schema = AnsibleValidator._get_cached_module_schema(module_name)
+            if not schema:
+                schema = AnsibleValidator._fetch_and_parse_module_schema(module_name)
+                if schema:
+                    AnsibleValidator._save_cached_module_schema(module_name, schema)
+            
+            if schema is not None:
+                required_opts = {k: v for k, v in schema.items() if v.get("required")}
+                task_lines = []
+                task_lines.append(f"    - name: Configure {module_name}")
+                task_lines.append(f"      {module_name}:")
+                
+                has_secrets = False
+                if required_opts:
+                    for opt_name, opt_info in required_opts.items():
+                        opt_type = opt_info.get("type", "string")
+                        # Prioritize user parameter if provided
+                        if params and opt_name in params:
+                            val = params[opt_name]
+                        else:
+                            val = AnsibleValidator._format_dummy_value(opt_name, opt_type)
+                            
+                        if any(s in opt_name.lower() for s in ["password", "token", "secret", "private_key"]):
+                            has_secrets = True
+                            
+                        if isinstance(val, bool):
+                            val_str = "true" if val else "false"
+                        elif isinstance(val, int):
+                            val_str = str(val)
+                        elif isinstance(val, list):
+                            val_str = json.dumps(val)
+                        elif isinstance(val, dict):
+                            val_str = json.dumps(val)
+                        else:
+                            val_str = f'"{val}"'
+                        task_lines.append(f"        {opt_name}: {val_str}")
+                else:
+                    task_lines.append(f"        # No required fields found in documentation")
+                
+                if has_secrets:
+                    task_lines.append("      no_log: true")
+                    
+                task_block = "\n".join(task_lines)
+                play_name = params.get("play_name") or f"Configure {module_name} in {env.lower()}"
+                
+                return (
+                    f"---\n"
+                    f"- name: {play_name}\n"
+                    f"  hosts: {hosts}\n"
+                    f"  become: {become}\n"
+                    f"  gather_facts: true\n"
+                    f"  tasks:\n"
+                    f"{task_block}\n"
+                )
             
         # Extract provider
         provider = params.get("provider") or ""
@@ -445,6 +504,22 @@ class AnsibleValidator:
         hosts = params.get("hosts") or "webservers"
         
         normalized = query.lower()
+
+        # Check for dynamic module first
+        module_name = AnsibleValidator._extract_module_name(query)
+        if module_name:
+            collection = "ansible.builtin"
+            if len(module_name.split(".")) >= 2:
+                collection = ".".join(module_name.split(".")[:-1])
+            return {
+                "template_name": f"{module_name}_config",
+                "playbook_name": f"{module_name.split('.')[-1]}.yml",
+                "title": f"{module_name} Configuration Playbook",
+                "description": f"Generated an idempotent Ansible playbook targeting hosts '{hosts}' using `{module_name}` modules with required parameters, tagged for Environment '{env}' and Owner '{owner}'.",
+                "verification_note": f"Requires the `{collection}` collection if it is not a builtin module.",
+                "remediation": f"Uses declarative Ansible modules from `{module_name}` instead of raw commands/scripts.",
+            }
+
         provider = params.get("provider") or ""
         if not provider:
             if any(kw in query.lower() for kw in ["azure", "azurerm"]):
@@ -514,3 +589,149 @@ class AnsibleValidator:
             "verification_note": f"Targets the '{hosts}' inventory group and expects privilege escalation for package/service changes.",
             "remediation": "Raw shell commands are replaced with declarative Ansible modules.",
         }
+
+    @staticmethod
+    def _get_module_url_path(module_name: str) -> str | None:
+        """Map FQCN to the path in the Ansible documentation site."""
+        parts = module_name.split(".")
+        if len(parts) >= 2:
+            dir_path = "/".join(parts[:-1])
+            mod_name = parts[-1]
+            return f"{dir_path}/{mod_name}_module.html"
+        return None
+
+    @staticmethod
+    def _extract_module_name(query: str) -> str | None:
+        """Extract module name from natural language query."""
+        import re
+        normalized = query.lower()
+        
+        # Look for FQCN patterns: A.B.C (e.g. azure.azcollection.azure_rm_virtualnetwork)
+        fqcn_match = re.search(r'\b([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b', query)
+        if fqcn_match:
+            return fqcn_match.group(1)
+            
+        # Look for phrases like "copy module" or "template module"
+        module_phrase_match = re.search(r'\b([a-zA-Z0-9_-]+)\s+module\b', normalized)
+        if module_phrase_match:
+            name = module_phrase_match.group(1)
+            # Map common short names
+            if name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]:
+                return f"ansible.builtin.{name}"
+            return name
+            
+        # Check standard short name lists directly in query word boundaries
+        for name in ["copy", "user", "file", "git", "template", "cron", "service", "package", "apt", "yum"]:
+            if re.search(r'\b' + name + r'\b', normalized):
+                return f"ansible.builtin.{name}"
+                
+        return None
+
+    @staticmethod
+    def _get_cached_module_schema(module_name: str) -> dict | None:
+        """Get the cached schema for a module if it exists."""
+        import json
+        try:
+            cache_dir = os.path.join(os.path.dirname(__file__), ".schema_cache")
+            cache_path = os.path.join(cache_dir, f"{module_name}.json")
+            if os.path.exists(cache_path):
+                with open(cache_path, "r") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _save_cached_module_schema(module_name: str, schema: dict) -> None:
+        """Save a module schema to the cache."""
+        import json
+        try:
+            cache_dir = os.path.join(os.path.dirname(__file__), ".schema_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, f"{module_name}.json")
+            with open(cache_path, "w") as f:
+                json.dump(schema, f, indent=2)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _fetch_and_parse_module_schema(module_name: str) -> dict | None:
+        """Fetch module documentation and extract required parameters."""
+        import urllib.request
+        import re
+        
+        # Canonicalize module name
+        if "." not in module_name:
+            module_name = f"ansible.builtin.{module_name}"
+            
+        url_path = AnsibleValidator._get_module_url_path(module_name)
+        if not url_path:
+            return None
+            
+        url = f"https://docs.ansible.com/projects/ansible/latest/collections/{url_path}"
+        
+        html_text = None
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'AntigravityAgent/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as res:
+                html_text = res.read().decode('utf-8')
+        except Exception as e:
+            logger.error(f"Failed to fetch Ansible module docs from {url}: {e}")
+            return None
+            
+        # Parse parameters
+        pattern = re.compile(
+            r'id="parameter-([a-zA-Z0-9_-]+)".*?'
+            r'class="ansible-option-title"[^>]*>.*?<strong>(.*?)</strong>.*?'
+            r'class="ansible-option-type-line"[^>]*>(.*?)<\/p>',
+            re.DOTALL | re.IGNORECASE
+        )
+        
+        params = {}
+        for match in pattern.finditer(html_text):
+            strong_name = match.group(2).strip()
+            type_line = match.group(3)
+            
+            # Determine type
+            type_match = re.search(r'class="ansible-option-type">([^<]+)</span>', type_line, re.IGNORECASE)
+            param_type = type_match.group(1).strip() if type_match else "string"
+            
+            # Determine if required
+            is_required = "required" in type_line.lower() or "ansible-option-required" in type_line.lower()
+            
+            params[strong_name] = {
+                "type": param_type,
+                "required": is_required
+            }
+        return params
+
+    @staticmethod
+    def _format_dummy_value(param_name: str, param_type: str) -> Any:
+        """Return a dynamic type-appropriate fallback value for the parameter."""
+        name_lower = param_name.lower()
+        type_lower = param_type.lower()
+        
+        if type_lower == "bool" or type_lower == "boolean":
+            return True
+        elif type_lower == "int" or type_lower == "integer":
+            return 80
+        elif type_lower == "list" or type_lower == "array":
+            return ["example-item"]
+        elif type_lower == "dict" or type_lower == "dictionary" or type_lower == "hash":
+            return {"key": "value"}
+        
+        # Check parameter name for logical fallbacks
+        if "path" in name_lower or name_lower == "dest" or name_lower == "src":
+            return "/path/to/file"
+        elif "port" in name_lower:
+            return 80
+        elif "url" in name_lower:
+            return "https://example.com"
+        elif "email" in name_lower:
+            return "admin@example.com"
+        elif "state" in name_lower:
+            return "present"
+        elif "name" in name_lower:
+            return "example-name"
+        else:
+            return f"example-{name_lower.replace('_', '-')}"

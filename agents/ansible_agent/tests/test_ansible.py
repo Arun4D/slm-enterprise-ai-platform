@@ -171,3 +171,79 @@ async def test_agent_summarize(agent):
     assert "Generator & Validator" in summary
     assert "hosts: webservers" in summary
 
+
+def test_generate_dynamic_copy():
+    """Test generating a playbook using the copy module schema."""
+    code = AnsibleValidator.generate_playbook("generate playbook for ansible.builtin.copy")
+    assert "ansible.builtin.copy:" in code
+    assert 'dest: "/path/to/file"' in code
+    assert 'become: true' in code
+
+
+def test_generate_dynamic_user():
+    """Test generating a playbook using the user module schema."""
+    code = AnsibleValidator.generate_playbook("generate playbook for user module")
+    assert "ansible.builtin.user:" in code
+    assert 'name: "example-name"' in code
+
+
+def test_generate_dynamic_with_no_log(monkeypatch):
+    """Test that a sensitive field triggers no_log: true automatically in dynamic playbooks."""
+    schema = {
+        "admin_password": {
+            "type": "string",
+            "required": True
+        }
+    }
+    monkeypatch.setattr(AnsibleValidator, "_get_cached_module_schema", lambda x: schema)
+    
+    code = AnsibleValidator.generate_playbook("generate playbook for custom.secret.module")
+    assert "admin_password:" in code
+    assert "no_log: true" in code
+
+
+def test_dynamic_scraper_offline(monkeypatch):
+    """Test that the scraper can fetch and parse required fields from HTML documentation."""
+    dummy_html = """
+    <html>
+      <body>
+        <div class="ansibleOptionAnchor" id="parameter-api_key"></div>
+        <p class="ansible-option-title" id="param-api_key"><strong>api_key</strong></p>
+        <p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+
+        <div class="ansibleOptionAnchor" id="parameter-password"></div>
+        <p class="ansible-option-title" id="param-password"><strong>password</strong></p>
+        <p class="ansible-option-type-line"><span class="ansible-option-type">string</span> / <span class="ansible-option-required">required</span></p>
+
+        <div class="ansibleOptionAnchor" id="parameter-optional_field"></div>
+        <p class="ansible-option-title" id="param-optional_field"><strong>optional_field</strong></p>
+        <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p>
+      </body>
+    </html>
+    """
+    
+    class DummyResponse:
+        def read(self):
+            return dummy_html.encode('utf-8')
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(*args, **kwargs):
+        return DummyResponse()
+
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+
+    # Force call fetch to bypass cache
+    schema = AnsibleValidator._fetch_and_parse_module_schema("community.general.custom_module")
+    assert schema is not None
+    assert "api_key" in schema
+    assert schema["api_key"]["required"] is True
+    assert "password" in schema
+    assert schema["password"]["required"] is True
+    assert "optional_field" in schema
+    assert schema["optional_field"]["required"] is False
+
+
