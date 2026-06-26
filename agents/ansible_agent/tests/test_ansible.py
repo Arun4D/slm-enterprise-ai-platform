@@ -263,3 +263,14 @@ async def test_agent_execute_invalid_module_returns_failed(agent):
     assert "No such ansible module exists: cpm_time_config" in result["error"]
 
 
+@pytest.mark.anyio
+async def test_agent_summarize_invalid_module_remediation(agent):
+    """Test that summarizing an invalid module failure returns helpful remediation tips."""
+    plan = await agent.plan("generate ansible code for cpm_time_config", {})
+    result = await agent.execute(plan)
+    summary = await agent.summarize(result)
+    assert "❌ Playbook Generation Failed" in summary
+    assert "No such ansible module exists: cpm_time_config" in summary
+    assert "Remediation Suggestion" in summary
+
+

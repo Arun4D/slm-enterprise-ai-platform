@@ -252,7 +252,17 @@ class AnsibleAgent(IAgent):
     async def summarize(self, result: dict) -> str:
         """Summarize results in Markdown."""
         if result.get("status") != "success":
-            return "Failed to run Ansible task."
+            err_msg = result.get("error", "Unknown error")
+            if "no such ansible module exists" in err_msg.lower():
+                return (
+                    f"### ❌ Playbook Generation Failed\n\n"
+                    f"**Error**: {err_msg}\n\n"
+                    f"**Remediation Suggestion**:\n"
+                    f"Please verify the module name or provide the Fully Qualified Collection Name (FQCN) "
+                    f"(e.g., `amazon.aws.ec2_instance`, `community.vmware.vmware_guest`, or `ansible.builtin.copy`) "
+                    f"to allow the dynamic parser to resolve its required fields."
+                )
+            return f"❌ Failed to run Ansible task: {err_msg}"
 
         data = result.get("result", {})
         action = data.get("action", "audit")
