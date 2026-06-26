@@ -1,0 +1,46 @@
+{
+  "terraform": {
+    "providers": {
+      "aws": {
+        "source": "hashicorp/aws",
+        "resources": ["aws_instance", "aws_api_gateway_account", "aws_datasync_task"]
+      },
+      "azurerm": {
+        "source": "hashicorp/azurerm",
+        "resources": ["azurerm_storage_sync", "azurerm_arc_kubernetes_cluster", "azurerm_resource_group"]
+      },
+      "google": {
+        "source": "hashicorp/google",
+        "resources": ["google_compute_instance", "google_apigee_api"]
+      },
+      "nutanix": {
+        "source": "nutanix/nutanix",
+        "resources": ["nutanix_virtual_machine"]
+      },
+      "vsphere": {
+        "source": "hashicorp/vsphere",
+        "resources": ["vsphere_virtual_machine", "vsphere_nas_datastore"]
+      }
+    }
+  },
+  "ansible": {
+    "collections": {
+      "ansible.builtin": {
+        "modules": ["copy", "user", "file", "service", "package", "ping"]
+      },
+      "nutanix.ncp": {
+        "modules": ["ntnx_vms"]
+      },
+      "community.vmware": {
+        "modules": ["vmware_guest"]
+      }
+    }
+  },
+  "github_actions": {
+    "schemas": {
+      "workflow": {
+        "url": "https://json.schemastore.org/github-workflow.json"
+      }
+    }
+  }
+}
