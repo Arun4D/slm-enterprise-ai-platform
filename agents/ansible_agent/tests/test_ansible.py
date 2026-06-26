@@ -89,7 +89,7 @@ def test_generate_playbook_nutanix():
     assert 'hosts: localhost' in code
     assert 'vm_name: "production-db-01"' in code
     assert 'target_host_uuid: "cluster-node-02"' in code
-    assert 'nutanix.ncloud.ntnx_vms' in code
+    assert 'nutanix.ncp.ntnx_vms' in code
 
 
 

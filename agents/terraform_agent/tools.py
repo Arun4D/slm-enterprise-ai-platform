@@ -968,12 +968,12 @@ class TerraformAuditor:
             top_level_text = args_section
 
         # Find top-level bullet points
-        pattern = r'(?:\*|-)\s+`([a-zA-Z0-9_]+)`\s+-\s+\((Required|Optional)\)(.*?)(?=(?:\*|-)\s+`|\Z)'
-        matches = re.findall(pattern, top_level_text, re.DOTALL)
+        pattern = r'(?:\*|-)\s+`([a-zA-Z0-9_]+)`\s*(?::\s*-|-)?\s*\((Required|Optional|Ooptional)\)(.*?)(?=(?:\*|-)\s+`|\Z)'
+        matches = re.findall(pattern, top_level_text, re.DOTALL | re.IGNORECASE)
         
         required_args = {}
         for name, req_status, desc in matches:
-            if req_status == "Required":
+            if req_status.lower() == "required":
                 desc_clean = desc.strip().lower()
                 is_block = "block as defined below" in desc_clean or "blocks as defined below" in desc_clean or "structure as defined below" in desc_clean
                 required_args[name] = {
@@ -986,8 +986,8 @@ class TerraformAuditor:
         
         nested_blocks = {}
         for block_name, block_content in block_matches:
-            block_fields = re.findall(r'(?:\*|-)\s+`([a-zA-Z0-9_]+)`\s+-\s+\((Required|Optional)\)', block_content)
-            req_fields = [f_name for f_name, f_status in block_fields if f_status == "Required"]
+            block_fields = re.findall(r'(?:\*|-)\s+`([a-zA-Z0-9_]+)`\s*(?::\s*-|-)?\s*\((Required|Optional|Ooptional)\)', block_content, re.IGNORECASE)
+            req_fields = [f_name for f_name, f_status in block_fields if f_status.lower() == "required"]
             nested_blocks[block_name.lower()] = req_fields
 
         schema = {}

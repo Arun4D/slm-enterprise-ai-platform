@@ -327,7 +327,7 @@ class AnsibleValidator:
                 f"      ManagedBy: Ansible\n"
                 f"  tasks:\n"
                 f"    - name: Migrate VM to another host\n"
-                f"      nutanix.ncloud.ntnx_vms:\n"
+                f"      nutanix.ncp.ntnx_vms:\n"
                 f"        nutanix_host: \"{{{{ nutanix_host }}}}\"\n"
                 f"        nutanix_username: \"{{{{ nutanix_username }}}}\"\n"
                 f"        nutanix_password: \"{{{{ vault_nutanix_password }}}}\"\n"
@@ -541,8 +541,8 @@ class AnsibleValidator:
                 "template_name": "nutanix_vm_migrate",
                 "playbook_name": "nutanix_migrate.yml",
                 "title": "Nutanix VM Migration Playbook",
-                "description": f"Generated an idempotent Ansible playbook targeting hosts '{hosts}' using `nutanix.ncloud` modules to migrate virtual machines, tagged for Environment '{env}' and Owner '{owner}'.",
-                "verification_note": "Requires the `nutanix.ncloud` collection and credentials supplied securely via vault variables.",
+                "description": f"Generated an idempotent Ansible playbook targeting hosts '{hosts}' using `nutanix.ncp` modules to migrate virtual machines, tagged for Environment '{env}' and Owner '{owner}'.",
+                "verification_note": "Requires the `nutanix.ncp` collection and credentials supplied securely via vault variables.",
                 "remediation": "Uses declarative Ansible modules from the Nutanix collection instead of raw scripts.",
             }
         if "vmware" in provider or "vmware" in normalized or "vcenter" in normalized:
