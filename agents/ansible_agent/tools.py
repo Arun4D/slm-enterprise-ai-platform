@@ -15,21 +15,6 @@ try:
 except Exception as e:
     logger.error(f"Failed to load config.yaml in ansible_agent tools: {e}")
 
-MOCK_NODES = {
-    "webserver_group": [
-        {"host": "web-srv-01", "ip": "10.0.1.10", "ping_status": "Success", "latency_ms": 3.4},
-        {"host": "web-srv-02", "ip": "10.0.1.11", "ping_status": "Success", "latency_ms": 4.1},
-        {"host": "web-srv-03", "ip": "10.0.1.12", "ping_status": "Failed (Timeout)", "latency_ms": 0.0}
-    ],
-    "playbook_validation": {
-        "syntax_valid": True,
-        "warnings": [
-            "Use of raw 'shell' module found. Consider substituting with 'apt' or 'yum' modules for package installations."
-        ],
-        "playbook_name": "site.yml"
-    }
-}
-
 class AnsibleValidator:
     """Validates playbooks and inventory host reports using offline rules."""
 
@@ -37,9 +22,23 @@ class AnsibleValidator:
     def inspect_playbook(playbook_text: str) -> dict:
         """Inspect playbook structure and warnings."""
         validation = AnsibleValidator.validate_playbook(playbook_text)
+        
+        syntax_valid = True
+        if playbook_text.strip() and ("hosts:" in playbook_text or playbook_text.strip().startswith("-") or playbook_text.strip().startswith("---")):
+            try:
+                yaml.safe_load(playbook_text)
+            except Exception:
+                syntax_valid = False
+                
+        playbook_name = "playbook.yml"
+        name_match = re.search(r'\b([a-zA-Z0-9_-]+\.ya?ml)\b', playbook_text)
+        if name_match:
+            playbook_name = name_match.group(1)
+            
         return {
-            **MOCK_NODES["playbook_validation"],
+            "syntax_valid": syntax_valid,
             "warnings": [finding["message"] for finding in validation["findings"]],
+            "playbook_name": playbook_name,
             "validation": validation,
         }
 
@@ -230,15 +229,117 @@ class AnsibleValidator:
             become = "true" if str(become_val).lower() in ["true", "yes", "1"] else "false"
             
         # Extract provider
-        provider = params.get("provider") or ("azure" if any(kw in query.lower() for kw in ["azure", "azurerm"]) else "builtin")
+        provider = params.get("provider") or ""
+        if not provider:
+            if any(kw in query.lower() for kw in ["azure", "azurerm"]):
+                provider = "azure"
+            elif "nutanix" in query.lower():
+                provider = "nutanix"
+            elif any(kw in query.lower() for kw in ["vmware", "vcenter"]):
+                provider = "vmware"
+            elif any(kw in query.lower() for kw in ["servicenow", "snow"]):
+                provider = "servicenow"
+            else:
+                provider = "builtin"
         provider = str(provider).strip().lower()
         
         normalized = query.lower()
         
-        if "azure" in provider or "azure" in normalized:
+        if "nutanix" in provider or "nutanix" in normalized:
+            vm_name = params.get("vm_name") or "vm-to-migrate"
+            target_host = params.get("target_host") or "target-cluster-node"
+            play_name = params.get("play_name") or f"Migrate Nutanix Virtual Machine in {env.lower()}"
+            
             return (
                 f"---\n"
-                f"- name: Provision Azure virtual network and subnets\n"
+                f"- name: {play_name}\n"
+                f"  hosts: {hosts}\n"
+                f"  gather_facts: false\n"
+                f"  vars:\n"
+                f"    nutanix_host: \"localhost\"\n"
+                f"    nutanix_username: \"admin\"\n"
+                f"    vm_name: \"{vm_name}\"\n"
+                f"    target_host_uuid: \"{target_host}\"\n"
+                f"    common_tags:\n"
+                f"      Environment: {env}\n"
+                f"      Owner: {owner}\n"
+                f"      ManagedBy: Ansible\n"
+                f"  tasks:\n"
+                f"    - name: Migrate VM to another host\n"
+                f"      nutanix.ncloud.ntnx_vms:\n"
+                f"        nutanix_host: \"{{{{ nutanix_host }}}}\"\n"
+                f"        nutanix_username: \"{{{{ nutanix_username }}}}\"\n"
+                f"        nutanix_password: \"{{{{ vault_nutanix_password }}}}\"\n"
+                f"        state: migrate\n"
+                f"        vm_name: \"{{{{ vm_name }}}}\"\n"
+                f"        host_uuid: \"{{{{ target_host_uuid }}}}\"\n"
+            )
+            
+        if "vmware" in provider or "vmware" in normalized or "vcenter" in normalized:
+            vm_name = params.get("vm_name") or "vm-to-migrate"
+            target_host = params.get("target_host") or "esxi-host-01"
+            play_name = params.get("play_name") or f"Migrate VMware Virtual Machine in {env.lower()}"
+            
+            return (
+                f"---\n"
+                f"- name: {play_name}\n"
+                f"  hosts: {hosts}\n"
+                f"  gather_facts: false\n"
+                f"  vars:\n"
+                f"    vcenter_hostname: \"vcenter.local\"\n"
+                f"    vcenter_username: \"administrator@vsphere.local\"\n"
+                f"    vm_name: \"{vm_name}\"\n"
+                f"    target_esxi_host: \"{target_host}\"\n"
+                f"    common_tags:\n"
+                f"      Environment: {env}\n"
+                f"      Owner: {owner}\n"
+                f"      ManagedBy: Ansible\n"
+                f"  tasks:\n"
+                f"    - name: Migrate VMware virtual machine (vMotion)\n"
+                f"      community.vmware.vmware_guest:\n"
+                f"        hostname: \"{{{{ vcenter_hostname }}}}\"\n"
+                f"        username: \"{{{{ vcenter_username }}}}\"\n"
+                f"        password: \"{{{{ vault_vcenter_password }}}}\"\n"
+                f"        validate_certs: false\n"
+                f"        name: \"{{{{ vm_name }}}}\"\n"
+                f"        esxi_hostname: \"{{{{ target_esxi_host }}}}\"\n"
+                f"        state: poweredon\n"
+            )
+            
+        if "servicenow" in provider or "servicenow" in normalized or "snow" in normalized:
+            play_name = params.get("play_name") or f"Create ServiceNow Incident in {env.lower()}"
+            short_desc = params.get("short_description") or "Automated incident report"
+            
+            return (
+                f"---\n"
+                f"- name: {play_name}\n"
+                f"  hosts: {hosts}\n"
+                f"  gather_facts: false\n"
+                f"  vars:\n"
+                f"    snow_instance: \"dev12345\"\n"
+                f"    snow_username: \"admin\"\n"
+                f"    common_tags:\n"
+                f"      Environment: {env}\n"
+                f"      Owner: {owner}\n"
+                f"      ManagedBy: Ansible\n"
+                f"  tasks:\n"
+                f"    - name: Create incident in ServiceNow\n"
+                f"      servicenow.itsm.incident:\n"
+                f"        instance: \"{{{{ snow_instance }}}}\"\n"
+                f"        username: \"{{{{ snow_username }}}}\"\n"
+                f"        password: \"{{{{ vault_snow_password }}}}\"\n"
+                f"        state: new\n"
+                f"        short_description: \"{short_desc}\"\n"
+                f"        description: \"Incident created via Ansible automation\"\n"
+                f"        impact: medium\n"
+                f"        urgency: medium\n"
+            )
+            
+        if "azure" in provider or "azure" in normalized:
+            play_name = params.get("play_name") or f"Provision Azure infrastructure for {env.lower()}"
+            return (
+                f"---\n"
+                f"- name: {play_name}\n"
                 f"  hosts: {hosts}\n"
                 f"  connection: local\n"
                 f"  gather_facts: false\n"
@@ -344,9 +445,47 @@ class AnsibleValidator:
         hosts = params.get("hosts") or "webservers"
         
         normalized = query.lower()
-        provider = params.get("provider") or ("azure" if any(kw in query.lower() for kw in ["azure", "azurerm"]) else "builtin")
+        provider = params.get("provider") or ""
+        if not provider:
+            if any(kw in query.lower() for kw in ["azure", "azurerm"]):
+                provider = "azure"
+            elif "nutanix" in query.lower():
+                provider = "nutanix"
+            elif any(kw in query.lower() for kw in ["vmware", "vcenter"]):
+                provider = "vmware"
+            elif any(kw in query.lower() for kw in ["servicenow", "snow"]):
+                provider = "servicenow"
+            else:
+                provider = "builtin"
         provider = str(provider).strip().lower()
         
+        if "nutanix" in provider or "nutanix" in normalized:
+            return {
+                "template_name": "nutanix_vm_migrate",
+                "playbook_name": "nutanix_migrate.yml",
+                "title": "Nutanix VM Migration Playbook",
+                "description": f"Generated an idempotent Ansible playbook targeting hosts '{hosts}' using `nutanix.ncloud` modules to migrate virtual machines, tagged for Environment '{env}' and Owner '{owner}'.",
+                "verification_note": "Requires the `nutanix.ncloud` collection and credentials supplied securely via vault variables.",
+                "remediation": "Uses declarative Ansible modules from the Nutanix collection instead of raw scripts.",
+            }
+        if "vmware" in provider or "vmware" in normalized or "vcenter" in normalized:
+            return {
+                "template_name": "vmware_vm_migrate",
+                "playbook_name": "vmware_migrate.yml",
+                "title": "VMware VM Migration Playbook",
+                "description": f"Generated an idempotent Ansible playbook targeting hosts '{hosts}' using `community.vmware.vmware_guest` module to manage virtual machine states and host migrations, tagged for Environment '{env}' and Owner '{owner}'.",
+                "verification_note": "Requires the `community.vmware` collection and vCenter connection credentials.",
+                "remediation": "Ensures idempotent operations on the vCenter API instead of running raw ssh/cli scripts.",
+            }
+        if "servicenow" in provider or "servicenow" in normalized or "snow" in normalized:
+            return {
+                "template_name": "servicenow_incident_create",
+                "playbook_name": "snow_incident.yml",
+                "title": "ServiceNow Incident Creation Playbook",
+                "description": f"Generated an idempotent Ansible playbook using `servicenow.itsm.incident` to create incident records, tagged for Environment '{env}' and Owner '{owner}'.",
+                "verification_note": "Requires `servicenow.itsm` collection and ServiceNow instance connection variables.",
+                "remediation": "API interactions are handled declaratively via the ITSM collection modules.",
+            }
         if "azure" in provider or "azure" in normalized:
             return {
                 "template_name": "azure_vnet_subnets",

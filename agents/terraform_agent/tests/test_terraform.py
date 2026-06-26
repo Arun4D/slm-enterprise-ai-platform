@@ -19,6 +19,14 @@ def agent():
     return TerraformAgent()
 
 
+@pytest.fixture(autouse=True)
+def mock_fetch_unless_explicit(request, monkeypatch):
+    """Automatically mock network fetching and caching for all tests except the dynamic scraper test."""
+    if request.node.name != "test_dynamic_schema_scraping_arc_kubernetes":
+        monkeypatch.setattr(TerraformAuditor, "_fetch_and_parse_schema", lambda p, r: None)
+        monkeypatch.setattr(TerraformAuditor, "_get_cached_schema", lambda p, r: None)
+
+
 # ===========================================================================
 # Auditor Unit Tests
 # ===========================================================================
@@ -133,6 +141,47 @@ def test_generate_hcl_explicit_provider_resource_scaffold():
     assert 'resource "google_sql_database_instance" "database"' in code
 
 
+def test_generate_hcl_nutanix():
+    """Test generating Nutanix virtual machine HCL resources."""
+    code = TerraformAuditor.generate_hcl(
+        "generate terraform code for nutanix vm migrate",
+        {"provider": "nutanix", "resource_type": "instance"}
+    )
+    assert 'resource "nutanix_virtual_machine" "vm"' in code
+    assert 'num_vcpus_per_socket = 2' in code
+    assert 'cluster_uuid' in code
+    assert 'Environment = "Production"' in code
+
+
+def test_generate_hcl_storage_sync():
+    """Test generating explicit azurerm_storage_sync resource."""
+    from main import TerraformAgent
+    agent = TerraformAgent()
+    params = agent._extract_parameters_with_rules("generate azurerm_storage_sync")
+    assert params.get("provider") == "azurerm"
+    assert params.get("resource_type") == "storage_sync"
+    
+    code = TerraformAuditor.generate_hcl("generate azurerm_storage_sync", params)
+    assert 'resource "azurerm_storage_sync" "storage_sync"' in code
+    assert 'source  = "hashicorp/azurerm"' in code
+
+
+def test_generate_hcl_datasync_task():
+    """Test generating explicit aws_datasync_task resource with mandatory fields."""
+    from main import TerraformAgent
+    agent = TerraformAgent()
+    params = agent._extract_parameters_with_rules("generate aws_datasync_task")
+    assert params.get("provider") == "aws"
+    assert params.get("resource_type") == "datasync_task"
+    
+    code = TerraformAuditor.generate_hcl("generate aws_datasync_task", params)
+    assert 'resource "aws_datasync_task" "datasync_task"' in code
+    assert 'destination_location_arn' in code
+    assert '"arn:aws:datasync:us-east-1:123456789012:location/loc-destination"' in code
+    assert 'source_location_arn' in code
+    assert '"arn:aws:datasync:us-east-1:123456789012:location/loc-source"' in code
+
+
 # ===========================================================================
 # Agent Integration Tests
 # ===========================================================================
@@ -220,3 +269,40 @@ async def test_agent_summarize(agent):
     summary = await agent.summarize(result)
     assert "Terraform HCL Generator" in summary
     assert "resource \"aws_vpc\"" in summary
+
+
+def test_dynamic_schema_scraping_arc_kubernetes():
+    """
+    Test that the agent dynamically scrapes raw markdown docs, caches the schema,
+    and populates all required arguments and nested blocks (such as identity).
+    """
+    import shutil
+    cache_dir = Path(__file__).resolve().parent.parent / ".schema_cache"
+    cache_file = cache_dir / "azurerm_arc_kubernetes_cluster.json"
+    
+    # 1. Clear cached file to force online fetch test
+    if cache_file.exists():
+        cache_file.unlink()
+        
+    query = "generate terraform code for azurerm_arc_kubernetes_cluster"
+    code = TerraformAuditor.generate_hcl(query, {"provider": "azurerm", "resource_type": "arc_kubernetes_cluster"})
+    
+    # 2. Assert all required arguments and blocks are populated
+    assert 'resource "azurerm_arc_kubernetes_cluster" "arc_kubernetes_cluster"' in code
+    assert 'name                           =' in code
+    assert 'resource_group_name            = azurerm_resource_group.rg.name' in code
+    assert 'agent_public_key_certificate   =' in code
+    assert 'location                       = azurerm_resource_group.rg.location' in code
+    assert 'identity {' in code
+    assert 'type                         = "SystemAssigned"' in code
+    
+    # 3. Assert caching works
+    assert cache_file.exists(), "Schema was not cached to the local cache folder."
+    
+    # 4. Run again to ensure it loads from cache successfully
+    cached_code = TerraformAuditor.generate_hcl(query, {"provider": "azurerm", "resource_type": "arc_kubernetes_cluster"})
+    assert 'identity {' in cached_code
+    
+    # 5. Run validation to ensure it passes company standards
+    validation = TerraformAuditor.validate_hcl(code)
+    assert validation["status"] == "pass"

@@ -76,6 +76,23 @@ def test_generate_playbook_azure():
     assert 'azure.azcollection' in code
 
 
+def test_generate_playbook_nutanix():
+    """Test generating Nutanix vm migration playbook with custom tags."""
+    params = {
+        "hosts": "localhost",
+        "environment": "testing",
+        "owner": "NutanixTeam",
+        "vm_name": "production-db-01",
+        "target_host": "cluster-node-02"
+    }
+    code = AnsibleValidator.generate_playbook("generate ansible code for nutanix vm migrate", params)
+    assert 'hosts: localhost' in code
+    assert 'vm_name: "production-db-01"' in code
+    assert 'target_host_uuid: "cluster-node-02"' in code
+    assert 'nutanix.ncloud.ntnx_vms' in code
+
+
+
 def test_validate_playbook_shell_warning():
     """Test that validating a playbook with raw shell usage returns a warning pointing to the collections URL."""
     playbook_content = """

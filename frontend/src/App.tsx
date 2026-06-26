@@ -233,12 +233,12 @@ function RichText({ text, theme = 'dark' }: { text: string; theme?: 'light' | 'd
           return (
             <div
               key={`code-${blockIndex}`}
-              className={`overflow-hidden rounded-xl border text-left shadow-sm ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-950'}`}
+              className={`overflow-hidden rounded-xl border text-left shadow-sm transition-colors duration-200 ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}
             >
-              <div className={`flex items-center justify-between border-b px-4 py-2 ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-400' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
+              <div className={`flex items-center justify-between border-b px-4 py-2 transition-colors duration-200 ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-400' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
                 <span className="text-[10px] font-bold uppercase tracking-wider">{block.language}</span>
               </div>
-              <pre className="max-w-full overflow-x-auto p-4 text-[12px] leading-5 text-slate-100">
+              <pre className={`max-w-full overflow-x-auto p-4 text-[12px] leading-5 transition-colors duration-200 ${theme === 'dark' ? 'text-slate-100' : 'text-slate-800'}`}>
                 <code className="font-mono whitespace-pre">{block.content}</code>
               </pre>
             </div>
@@ -355,6 +355,7 @@ function App() {
   const [tailResult, setTailResult] = useState<LogAnalysisResult | null>(null);
   const tailEventSourceRef = useRef<EventSource | null>(null);
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   
   const [streamRightTab, setStreamRightTab] = useState<'metrics' | 'deep'>('metrics');
   const [isAnalyzingStreamFile, setIsAnalyzingStreamFile] = useState(false);
@@ -846,6 +847,12 @@ function App() {
   }, [tailLines, isTailing]);
 
   useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isStreaming]);
+
+  useEffect(() => {
     if (activeLogTab === 'scan') {
       stopTailing();
     }
@@ -932,35 +939,35 @@ function App() {
   };
 
   return (
-    <div className={`min-h-screen font-sans antialiased selection:bg-lime-400 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-950 text-slate-100 selection:text-slate-950' : 'bg-slate-50 text-slate-900 selection:text-white'}`}>
+    <div className={`min-h-screen font-sans antialiased selection:bg-indigo-500/30 transition-colors duration-300 ${theme === 'dark' ? 'bg-[#0b0f19] text-slate-100' : 'bg-[#f4f7fc] text-slate-900'}`}>
       <div className="mx-auto flex min-h-screen max-w-full flex-col px-4 py-4 sm:px-6 lg:px-8">
         
         {/* ========================================== HEADER ========================================== */}
-        <header className={`mb-4 flex items-center justify-between rounded-3xl border px-6 py-4 shadow-xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/40' : 'border-slate-200/85 bg-white/75'}`}>
+        <header className={`mb-4 flex items-center justify-between rounded-3xl border px-6 py-4 shadow-xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-[#111625]/50' : 'border-slate-200/85 bg-white/75'}`}>
           <div>
             <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="flex h-2.5 w-2.5 rounded-full bg-indigo-500 animate-pulse" />
               <p className={`text-[10px] font-bold uppercase tracking-[0.25em] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>On-Premises SLM Infrastructure</p>
             </div>
-            <h1 className="mt-1 text-2xl font-black bg-gradient-to-r from-lime-400 to-emerald-400 bg-clip-text text-transparent">SLM AI Operations Platform</h1>
+            <h1 className="mt-1 text-2xl font-black bg-gradient-to-r from-indigo-400 via-purple-400 to-emerald-400 bg-clip-text text-transparent">SLM AI Operations Platform</h1>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className={`rounded-full border px-4.5 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-200 hover:bg-slate-800' : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+              className={`rounded-full border px-4.5 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${theme === 'dark' ? 'border-slate-800 bg-[#111625] text-slate-300 hover:bg-[#161b30]' : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
               onClick={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))}
             >
               {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}
             </button>
-            <div className="rounded-full bg-lime-400/15 border border-lime-400/20 px-3.5 py-1 text-xs font-bold text-lime-400">Enterprise Operator</div>
+            <div className={`rounded-full px-3.5 py-1 text-xs font-bold border transition ${theme === 'dark' ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>Enterprise Operator</div>
           </div>
         </header>
 
         <div className="grid flex-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
           
           {/* ========================================== SIDEBAR ========================================== */}
-          <aside className={`flex flex-col rounded-3xl border p-4 shadow-xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/60 bg-slate-900/20' : 'border-slate-200/70 bg-white/40'}`}>
+          <aside className={`flex flex-col rounded-3xl border p-4 shadow-xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/60 bg-[#111625]/25' : 'border-slate-200/70 bg-white/40'}`}>
             <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-3 px-1">Navigation Systems</p>
             <nav className="space-y-1">
               {sections.map((sec) => (
@@ -968,7 +975,7 @@ function App() {
                   key={sec.id}
                   type="button"
                   onClick={() => setActiveSection(sec.id)}
-                  className={`w-full rounded-2xl px-4 py-2.5 text-left text-xs font-semibold transition-all duration-200 ${activeSection === sec.id ? 'bg-lime-400 text-slate-950 shadow-soft' : theme === 'dark' ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-700 hover:bg-slate-200/50'}`}
+                  className={`w-full rounded-2xl px-4 py-2.5 text-left text-xs font-semibold transition-all duration-200 ${activeSection === sec.id ? 'bg-indigo-600 text-white shadow-md' : theme === 'dark' ? 'text-slate-300 hover:bg-slate-900/60' : 'text-slate-700 hover:bg-slate-200/50'}`}
                 >
                   {sec.label}
                 </button>
@@ -981,7 +988,7 @@ function App() {
                 <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Conversations Memory</p>
                 <button
                   onClick={createNewSession}
-                  className="text-[10px] font-bold text-lime-400 hover:text-lime-300 transition"
+                  className={`text-[10px] font-bold transition ${theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'}`}
                   title="Start New Thread"
                 >
                   + New Chat
@@ -995,7 +1002,7 @@ function App() {
                   sessions.map((sess) => (
                     <div
                       key={sess.id}
-                      className={`group flex items-center justify-between rounded-xl px-3 py-2 text-xs border transition cursor-pointer ${currentSessionId === sess.id ? (theme === 'dark' ? 'bg-slate-900/80 border-slate-700/80 text-lime-400' : 'bg-lime-50 border-lime-200 text-lime-600') : (theme === 'dark' ? 'bg-slate-950/20 border-transparent text-slate-400 hover:bg-slate-900/30' : 'bg-slate-100/50 border-transparent text-slate-500 hover:bg-slate-200/40')}`}
+                      className={`group flex items-center justify-between rounded-xl px-3 py-2 text-xs border transition cursor-pointer ${currentSessionId === sess.id ? (theme === 'dark' ? 'bg-indigo-950/40 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700') : (theme === 'dark' ? 'bg-slate-950/20 border-transparent text-slate-400 hover:bg-[#111625]/30' : 'bg-slate-100/50 border-transparent text-slate-500 hover:bg-slate-200/40')}`}
                     >
                       <span className="truncate flex-1 pr-2 font-medium" onClick={() => loadSession(sess.id)}>
                         💬 {sess.title}
@@ -1013,7 +1020,7 @@ function App() {
               </div>
             </div>
 
-            <div className={`mt-4 rounded-2xl border p-3 text-[11px] transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-100/50 text-slate-650'}`}>
+            <div className={`mt-4 rounded-2xl border p-3 text-[11px] transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-[#0d101a] text-slate-500' : 'border-slate-200 bg-slate-100/50 text-slate-600'}`}>
               <p className={`font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Local Architecture Validated</p>
               <p className="mt-1 leading-5">Running offline. Routing requests via internal Python adapters to Qwen 2.5 Coder 1.5B.</p>
             </div>
@@ -1022,25 +1029,39 @@ function App() {
           {/* ========================================== MAIN WORKSPACE ========================================== */}
           <main className="space-y-4">
             
-            {/* 1. CHAT STREAMING SECTION */}
             {activeSection === 'chat' && (
-              <section className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/35' : 'border-slate-200 bg-white'}`}>
-                <div className={`mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4 ${theme === 'dark' ? 'border-slate-800/60' : 'border-slate-100'}`}>
+              <section className={`flex flex-col h-[calc(100vh-130px)] min-h-[600px] rounded-3xl border p-5 shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+                theme === 'dark' ? 'border-slate-800/80 bg-[#111625]/35' : 'border-slate-200 bg-white'
+              }`}>
+                {/* sleek header */}
+                <div className={`mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4 shrink-0 ${
+                  theme === 'dark' ? 'border-slate-800/60' : 'border-slate-100'
+                }`}>
                   <div>
-                    <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>Interactive AI Operations Panel</h2>
-                    <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Stream natural-language commands and observe SLM task classification.</p>
+                    <h2 className={`text-lg font-black tracking-tight ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>
+                      Interactive AI Operations Panel
+                    </h2>
+                    <p className={`text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Offline-first execution routed via local model orchestration.
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <label className={`flex items-center gap-2 rounded-2xl border px-4.5 py-2 text-xs transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-250 bg-slate-50'}`}>
-                      <span className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Target Agent:</span>
+                    <label className="flex items-center gap-2 text-xs">
+                      <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}>Target Agent:</span>
                       <select
                         value={selectedAgent}
                         onChange={(e) => setSelectedAgent(e.target.value)}
-                        className={`bg-transparent text-xs font-bold outline-none cursor-pointer ${theme === 'dark' ? 'text-lime-400' : 'text-emerald-600'}`}
+                        className={`rounded-xl border px-3 py-1.5 text-xs font-semibold outline-none cursor-pointer transition ${
+                          theme === 'dark' 
+                            ? 'border-slate-800 bg-[#0b0f19] text-indigo-400 hover:border-slate-700' 
+                            : 'border-slate-200 bg-slate-50 text-indigo-600 hover:border-slate-300'
+                        }`}
                       >
                         {availableAgents.map((ag) => (
-                          <option key={ag.id} value={ag.id} className={theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-900'}>{ag.name}</option>
+                          <option key={ag.id} value={ag.id} className={theme === 'dark' ? 'bg-[#0b0f19] text-slate-100' : 'bg-white text-slate-900'}>
+                            {ag.name}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -1049,47 +1070,57 @@ function App() {
 
                 {/* LOGS STREAMING ACTIONS INDICATORS OVERLAY */}
                 {isStreaming && (
-                  <div className={`mb-3 rounded-2xl border p-3.5 text-xs animate-pulse space-y-1 ${theme === 'dark' ? 'border-lime-400/20 bg-lime-400/5 text-slate-300' : 'border-emerald-500/20 bg-emerald-50/40 text-slate-700'}`}>
-                    <p className={`font-bold ${theme === 'dark' ? 'text-lime-400' : 'text-emerald-600'}`}>⚡ Live Agent Stream Execution Pipeline</p>
-                    {streamRouting && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-250' : 'text-slate-800'}`}>🔍 **Routing**: {streamRouting}</p>}
-                    {streamPlanning && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-250' : 'text-slate-800'}`}>📋 **Planning**: {streamPlanning}</p>}
-                    {streamExecution && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-250' : 'text-slate-800'}`}>⚙️ **Execution**: {streamExecution}</p>}
+                  <div className={`mb-3 rounded-2xl border p-3.5 text-xs animate-pulse space-y-1 shrink-0 ${
+                    theme === 'dark' ? 'border-indigo-500/20 bg-indigo-500/5 text-slate-300' : 'border-indigo-500/10 bg-indigo-50/40 text-slate-700'
+                  }`}>
+                    <p className={`font-bold ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>⚡ Live Agent Stream Execution Pipeline</p>
+                    {streamRouting && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-800'}`}>🔍 **Routing**: {streamRouting}</p>}
+                    {streamPlanning && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-800'}`}>📋 **Planning**: {streamPlanning}</p>}
+                    {streamExecution && <p className={`pl-3 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-800'}`}>⚙️ **Execution**: {streamExecution}</p>}
                   </div>
                 )}
 
                 {/* 🕒 DATETIME RANGE FILTER BOUNDARY */}
                 {selectedAgent === 'log_analysis_agent' && (
-                  <div className={`mb-4 rounded-2xl border p-3 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/40 text-slate-300' : 'border-slate-200 bg-slate-50/50 text-slate-700'}`}>
+                  <div className={`mb-4 rounded-2xl border p-3 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 shrink-0 ${
+                    theme === 'dark' ? 'border-slate-800 bg-[#0d101a] text-slate-300' : 'border-slate-200 bg-slate-50/50 text-slate-700'
+                  }`}>
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-lg">🕒</span>
                       <div className="text-left">
-                        <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-850'}`}>Datetime Boundary Filter</p>
+                        <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-900'}`}>Datetime Boundary Filter</p>
                         <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Limit log parser analysis or search to a specific range.</p>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2.5">
                       <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>Start:</span>
+                        <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}>Start:</span>
                         <input
                           type="datetime-local"
                           value={startTime}
                           onChange={(e) => setStartTime(e.target.value)}
-                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${
+                            theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-indigo-400' : 'border-slate-300 bg-white text-slate-800 focus:border-indigo-600'
+                          }`}
                         />
                       </div>
                       <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>End:</span>
+                        <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}>End:</span>
                         <input
                           type="datetime-local"
                           value={endTime}
                           onChange={(e) => setEndTime(e.target.value)}
-                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                          className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${
+                            theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-indigo-400' : 'border-slate-300 bg-white text-slate-800 focus:border-indigo-600'
+                          }`}
                         />
                       </div>
                       {(startTime || endTime) && (
                         <button
                           onClick={() => { setStartTime(''); setEndTime(''); }}
-                          className={`rounded px-2.5 py-1 text-[10px] font-bold border transition ${theme === 'dark' ? 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'border-red-200 bg-red-50 text-red-650 hover:bg-red-105'}`}
+                          className={`rounded px-2.5 py-1 text-[10px] font-bold border transition ${
+                            theme === 'dark' ? 'border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'border-red-200 bg-red-50 text-red-655 hover:bg-red-105'
+                          }`}
                         >
                           Clear
                         </button>
@@ -1099,61 +1130,203 @@ function App() {
                 )}
 
                 {/* MESSAGES VIEW WINDOW */}
-                <div className={`mb-4 max-h-[360px] overflow-y-auto space-y-3.5 rounded-3xl border p-4 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/70' : 'border-slate-250 bg-slate-50/50'}`}>
-                  {messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`rounded-2xl p-4.5 border text-xs max-w-[85%] transition-all duration-200 ${
-                        msg.role === 'assistant'
-                          ? theme === 'dark'
-                            ? 'border-slate-800/80 bg-slate-900/40 text-slate-200 mr-auto'
-                            : 'border-slate-200 bg-white text-slate-800 mr-auto shadow-sm'
-                          : msg.role === 'user'
-                            ? theme === 'dark'
-                              ? 'border-slate-700/60 bg-slate-800/60 text-slate-100 ml-auto'
-                              : 'border-lime-200 bg-lime-50/50 text-slate-850 ml-auto shadow-sm'
-                            : theme === 'dark'
-                              ? 'border-slate-900 bg-slate-950 text-slate-500 italic max-w-full text-center'
-                              : 'border-slate-200 bg-slate-100/50 text-slate-400 italic max-w-full text-center'
-                      }`}
-                    >
-                      <div className={`mb-1.5 text-[9px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {msg.role === 'assistant' ? '🤖 SLM Operations Assistant' : msg.role === 'user' ? '👤 operator' : '⚙️ system'}
+                <div className={`flex-1 overflow-y-auto min-h-0 mb-4 py-4 px-2 space-y-6 scrollbar-thin ${
+                  theme === 'dark' 
+                    ? 'scrollbar-thumb-slate-800 scrollbar-track-transparent' 
+                    : 'scrollbar-thumb-slate-200 scrollbar-track-transparent'
+                }`}>
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center space-y-8 px-4 animate-fadeIn">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white text-3xl font-black shadow-lg shadow-indigo-500/15">
+                        🤖
                       </div>
-                      <MessageContent message={msg} theme={theme} />
+                      <div className="space-y-2">
+                        <h3 className={`text-xl font-black tracking-tight ${theme === 'dark' ? 'text-slate-500' : 'text-slate-900'}`}>
+                          How can I assist with AI Operations today?
+                        </h3>
+                        <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                          Select a specialized agent or enter your SRE / DevOps prompt below.
+                        </p>
+                      </div>
+
+                      {/* QUICK ACTION CARDS */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-xl">
+                        {[
+                          {
+                            title: 'Analyze Log Errors',
+                            desc: 'Identify anomalies & RCA in your logs folder.',
+                            agent: 'log_analysis_agent',
+                            prompt: 'Scan folder and locate database connection timeout errors'
+                          },
+                          {
+                            title: 'Deploy Encrypted VPC',
+                            desc: 'Generate secure compliant Terraform configuration.',
+                            agent: 'terraform_agent',
+                            prompt: 'generate terraform code for encrypted vpc with Environment, Owner, and Project tags and no public administrative ports'
+                          },
+                          {
+                            title: 'Migrate Nutanix VM',
+                            desc: 'Create modular playbook with company standards.',
+                            agent: 'ansible_agent',
+                            prompt: 'generate ansible code for nutanix vm migrate ensuring become privilege escalation and descriptive names'
+                          },
+                          {
+                            title: 'Validate CI/CD Actions',
+                            desc: 'Check GitHub Actions workflow YAML for security risks.',
+                            agent: 'github_actions_agent',
+                            prompt: 'validate CI/CD github actions workflow for inline secret risk, trigger coverage, and action pinning'
+                          }
+                        ].map((card, cidx) => (
+                          <button
+                            key={cidx}
+                            onClick={() => {
+                              setSelectedAgent(card.agent);
+                              setDraft(card.prompt);
+                            }}
+                            className={`p-4 text-left border rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md ${
+                              theme === 'dark'
+                                ? 'border-slate-800 bg-[#111625]/60 text-slate-200 hover:border-slate-700 hover:bg-[#161b30]'
+                                : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:shadow-slate-100'
+                            }`}
+                          >
+                            <span className={`font-semibold text-xs block mb-1 ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>{card.title}</span>
+                            <span className={`text-[11px] block leading-normal ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                              {card.desc}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    messages.map((msg, idx) => {
+                      const isAssistant = msg.role === 'assistant';
+                      const isSystem = msg.role === 'system';
+                      
+                      if (isSystem) {
+                        return (
+                          <div key={idx} className="w-full text-center py-2 text-[11px] text-slate-400 dark:text-slate-500 italic font-mono">
+                            ⚙️ {msg.text}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`w-full py-5 border-b last:border-0 ${
+                            theme === 'dark' ? 'border-slate-800/40' : 'border-slate-200/40'
+                          }`}
+                        >
+                          <div className="flex w-full max-w-3xl mx-auto gap-4 px-4 items-start justify-start text-left">
+                            {isAssistant ? (
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-bold shadow-sm ${
+                                theme === 'dark' 
+                                  ? 'bg-gradient-to-tr from-indigo-500 to-purple-600 text-white' 
+                                  : 'bg-indigo-600 text-white'
+                              }`}>
+                                🤖
+                              </div>
+                            ) : (
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-bold shadow-sm ${
+                                theme === 'dark' 
+                                  ? 'bg-slate-800 text-slate-400 border border-slate-700' 
+                                  : 'bg-slate-200 text-slate-700 border border-slate-300'
+                              }`}>
+                                👤
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <div className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${
+                                isAssistant 
+                                  ? theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+                                  : theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                              }`}>
+                                {isAssistant ? 'SLM Operations Assistant' : 'Operator'}
+                              </div>
+                              <div className={`text-sm leading-relaxed ${
+                                theme === 'dark' ? 'text-slate-200' : 'text-slate-800'
+                              }`}>
+                                <MessageContent message={msg} theme={theme} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 {/* INPUT ZONE */}
-                <div className={`rounded-3xl border p-3 transition-all duration-300 ${theme === 'dark' ? 'border-slate-800 bg-slate-950/80' : 'border-slate-250 bg-white shadow-sm'}`}>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                    placeholder="Ask standard SRE questions or route tickets (e.g. 'find database connection errors' or 'lookup ticket INC00101')..."
-                    className={`min-h-[90px] w-full resize-none rounded-2xl border border-transparent bg-transparent px-3 py-2 text-xs outline-none transition ${theme === 'dark' ? 'text-slate-100 placeholder:text-slate-500 focus:placeholder:text-slate-600' : 'text-slate-800 placeholder:text-slate-400 focus:placeholder:text-slate-500'}`}
-                  />
-                  <div className={`flex items-center justify-between border-t pt-2.5 px-1.5 ${theme === 'dark' ? 'border-slate-900' : 'border-slate-100'}`}>
-                    {fileEnabledAgents.has(selectedAgent) ? (
-                      <label className={`flex items-center gap-2 text-xs cursor-pointer transition ${theme === 'dark' ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}>
-                        <input type="file" multiple onChange={handleFiles} className="hidden" />
-                        <span className={`rounded-full border px-3 py-1.5 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 hover:bg-slate-800' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}>
-                          {selectedAgent === 'log_analysis_agent' ? '📁 Add log file attachment' : '📎 Add code/config files'}
-                        </span>
-                        {attachments.length > 0 && <span className={`text-[10px] font-bold ${theme === 'dark' ? 'text-lime-400' : 'text-emerald-600'}`}>({attachments.length} selected)</span>}
-                      </label>
-                    ) : <div />}
+                <div className="max-w-3xl mx-auto w-full shrink-0">
+                  <div className={`relative flex flex-col rounded-[26px] border shadow-lg transition-all duration-300 ${
+                    theme === 'dark' 
+                      ? 'border-slate-800 bg-[#161b30]/85 focus-within:border-slate-700/80 focus-within:ring-1 focus-within:ring-indigo-500/50' 
+                      : 'border-slate-200 bg-[#f8fafc] focus-within:border-slate-300 focus-within:ring-1 focus-within:ring-indigo-600/30'
+                  }`}>
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                      placeholder="Send a message to the AI Operations agent..."
+                      className={`w-full min-h-[50px] max-h-[200px] resize-none bg-transparent px-5 pt-4 pb-2 text-sm outline-none border-0 focus:ring-0 ${
+                        theme === 'dark' ? 'text-slate-100 placeholder:text-slate-500' : 'text-slate-800 placeholder:text-slate-400'
+                      }`}
+                    />
                     
-                    <button
-                      type="button"
-                      onClick={sendMessage}
-                      disabled={!draft.trim() && attachments.length === 0}
-                      className={`rounded-full px-6 py-2 text-xs font-bold shadow-soft transition disabled:opacity-30 disabled:cursor-not-allowed ${theme === 'dark' ? 'bg-lime-400 text-slate-950 hover:bg-lime-300' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
-                    >
-                      Stream Prompt
-                    </button>
+                    <div className="flex items-center justify-between px-4 pb-3.5 pt-1.5">
+                      {/* Left: Attachment & Selected files indicator */}
+                      <div className="flex items-center gap-2">
+                        {fileEnabledAgents.has(selectedAgent) ? (
+                          <label className={`flex items-center gap-1.5 text-xs cursor-pointer transition ${
+                            theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
+                          }`}>
+                            <input type="file" multiple onChange={handleFiles} className="hidden" />
+                            <span className={`p-2 rounded-full border transition flex items-center justify-center ${
+                              theme === 'dark' 
+                                ? 'border-slate-800 bg-[#0b0f19] hover:bg-slate-800 text-slate-300' 
+                                : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-600'
+                            }`} title="Attach file">
+                              📎
+                            </span>
+                          </label>
+                        ) : null}
+
+                        {attachments.length > 0 && (
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            theme === 'dark' 
+                              ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300' 
+                              : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                          }`}>
+                            {attachments.length} selected
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Right: Send Button */}
+                      <button
+                        type="button"
+                        onClick={sendMessage}
+                        disabled={!draft.trim() && attachments.length === 0}
+                        className={`w-9 h-9 rounded-full flex items-center justify-center shadow-md transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                          theme === 'dark' 
+                            ? 'bg-indigo-500 text-white hover:bg-indigo-400' 
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        }`}
+                        title="Send Message"
+                      >
+                        <span className="text-md font-bold">↑</span>
+                      </button>
+                    </div>
                   </div>
+                  
+                  {/* Fine print footer */}
+                  <p className={`mt-2 text-center text-[10px] ${
+                    theme === 'dark' ? 'text-slate-600' : 'text-slate-400'
+                  }`}>
+                    SLMs can make mistakes. Verify critical actions before deploying configurations.
+                  </p>
                 </div>
               </section>
             )}
@@ -1182,9 +1355,9 @@ function App() {
                     <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4 ${theme === 'dark' ? 'border-slate-800/60' : 'border-slate-100'}`}>
                       <div>
                         <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>Local Log Folders Scanner</h2>
-                        <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Map an entire directory of logs recursively to analyze error signatures.</p>
+                        <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Map an entire directory of logs recursively to analyze error signatures.</p>
                       </div>
-                      <label className={`rounded-full border px-4.5 py-2.5 text-xs font-bold cursor-pointer transition ${theme === 'dark' ? 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-900' : 'border-slate-250 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
+                      <label className={`rounded-full border px-4.5 py-2.5 text-xs font-bold cursor-pointer transition ${theme === 'dark' ? 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-900' : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
                         📁 Pick Directory
                         {/* @ts-ignore */}
                         <input type="file" webkitdirectory="true" directory={true as any} multiple className="hidden" onChange={handleFolder} />
@@ -1196,27 +1369,27 @@ function App() {
                       <div className="flex items-center gap-2 text-xs">
                         <span className="text-lg">🕒</span>
                         <div className="text-left">
-                          <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-850'}`}>Datetime Boundary Filter</p>
+                          <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Datetime Boundary Filter</p>
                           <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Limit log parser analysis to a specific range.</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2.5">
                         <div className="flex items-center gap-1.5 text-[10px]">
-                          <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>Start:</span>
+                          <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}>Start:</span>
                           <input
                             type="datetime-local"
                             value={startTime}
                             onChange={(e) => setStartTime(e.target.value)}
-                            className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                            className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550'}`}
                           />
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px]">
-                          <span className={theme === 'dark' ? 'text-slate-450' : 'text-slate-500'}>End:</span>
+                          <span className={theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}>End:</span>
                           <input
                             type="datetime-local"
                             value={endTime}
                             onChange={(e) => setEndTime(e.target.value)}
-                            className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                            className={`rounded-lg border px-2.5 py-1 transition text-[10px] w-44 outline-none ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550'}`}
                           />
                         </div>
                         {(startTime || endTime) && (
@@ -1238,7 +1411,7 @@ function App() {
                           <p className={`font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Identified Files Matrix ({folderFiles.length} files)</p>
                           <ul className="grid grid-cols-2 gap-2 font-mono text-[10px]">
                             {folderPaths.map((path) => (
-                              <li key={path} className={`truncate p-1.5 rounded border transition ${theme === 'dark' ? 'bg-slate-900/60 border-slate-800/40 text-slate-400' : 'bg-white border-slate-200 text-slate-650'}`}>✓ {path}</li>
+                              <li key={path} className={`truncate p-1.5 rounded border transition ${theme === 'dark' ? 'bg-slate-900/60 border-slate-800/40 text-slate-400' : 'bg-white border-slate-200 text-slate-600'}`}>✓ {path}</li>
                             ))}
                           </ul>
                           
@@ -1309,7 +1482,7 @@ function App() {
 
                       <div className="grid gap-4 md:grid-cols-3">
                         <div className="flex flex-col gap-1 md:col-span-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Scan System Log Directory</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Scan System Log Directory</span>
                           <div className="flex gap-2">
                             <input
                               type="text"
@@ -1317,13 +1490,13 @@ function App() {
                               onChange={(e) => setFolderStreamPath(e.target.value)}
                               disabled={isTailing}
                               placeholder="e.g. /home/arun/Workspace/backend/logs or C:\Logs"
-                              className={`flex-1 rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                              className={`flex-1 rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550'}`}
                             />
                             <button
                               type="button"
                               onClick={scanStreamFolder}
                               disabled={isTailing || isScanningStreamFolder}
-                              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${theme === 'dark' ? 'bg-slate-800 text-lime-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-750 hover:bg-slate-200'}`}
+                              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${theme === 'dark' ? 'bg-slate-800 text-lime-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
                             >
                               {isScanningStreamFolder ? 'Scanning...' : 'List Files'}
                             </button>
@@ -1331,13 +1504,13 @@ function App() {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Select Target Log File</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Select Target Log File</span>
                           {availableStreamFiles.length > 0 ? (
                             <select
                               value={tailFilePath}
                               onChange={(e) => setTailFilePath(e.target.value)}
                               disabled={isTailing}
-                              className={`rounded-xl border px-3 py-2 text-xs font-mono outline-none cursor-pointer transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550'}`}
+                              className={`rounded-xl border px-3 py-2 text-xs font-mono outline-none cursor-pointer transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550'}`}
                             >
                               {availableStreamFiles.map((file) => (
                                 <option key={file} value={file}>{file.split(/[\\/]/).pop() || file}</option>
@@ -1350,7 +1523,7 @@ function App() {
                               onChange={(e) => setTailFilePath(e.target.value)}
                               disabled={isTailing}
                               placeholder="e.g. backend/logs/app.log"
-                              className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
+                              className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
                             />
                           )}
                         </div>
@@ -1358,32 +1531,32 @@ function App() {
 
                       <div className="grid gap-4 md:grid-cols-3">
                         <div className="flex flex-col gap-1 md:col-span-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Active Log Target Path</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Active Log Target Path</span>
                           <input
                             type="text"
                             value={tailFilePath}
                             onChange={(e) => setTailFilePath(e.target.value)}
                             disabled={isTailing}
-                            className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-lime-400' : 'border-slate-250 bg-slate-50 text-emerald-650'}`}
+                            className={`rounded-xl border px-3.5 py-2 text-xs font-mono outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-lime-400' : 'border-slate-300 bg-slate-50 text-emerald-650'}`}
                           />
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Optional Time Filter</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Optional Time Filter</span>
                           <div className="flex gap-2">
                             <input
                               type="datetime-local"
                               value={startTime}
                               onChange={(e) => setStartTime(e.target.value)}
                               disabled={isTailing}
-                              className={`rounded-xl border px-2.5 py-1 text-[10px] w-full outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
+                              className={`rounded-xl border px-2.5 py-1 text-[10px] w-full outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
                             />
                             <input
                               type="datetime-local"
                               value={endTime}
                               onChange={(e) => setEndTime(e.target.value)}
                               disabled={isTailing}
-                              className={`rounded-xl border px-2.5 py-1 text-[10px] w-full outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-250 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
+                              className={`rounded-xl border px-2.5 py-1 text-[10px] w-full outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900 text-slate-100 focus:border-lime-400 disabled:opacity-50' : 'border-slate-300 bg-white text-slate-800 focus:border-emerald-550 disabled:opacity-50'}`}
                             />
                           </div>
                         </div>
@@ -1431,11 +1604,11 @@ function App() {
                       {/* Left: Terminal Console */}
                       <div className="flex flex-col gap-2">
                         <div className="flex justify-between items-center px-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Raw Tail Stream</span>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Raw Tail Stream</span>
                           <span className={`text-[10px] font-mono ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Showing last {tailLines.length} lines</span>
                         </div>
                         
-                        <div className={`rounded-3xl border p-4 font-mono text-[11px] h-[400px] overflow-y-auto leading-relaxed shadow-inner flex flex-col justify-start relative transition-all duration-300 bg-slate-950 border-slate-850 text-slate-100`}>
+                        <div className={`rounded-3xl border p-4 font-mono text-[11px] h-[400px] overflow-y-auto leading-relaxed shadow-inner flex flex-col justify-start relative transition-all duration-300 bg-slate-950 border-slate-800 text-slate-100`}>
                           {/* Console header */}
                           <div className="flex items-center gap-1.5 border-b border-slate-800/80 pb-2 mb-3">
                             <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
@@ -1476,7 +1649,7 @@ function App() {
                                 };
                                 return (
                                   <div key={idx} className={`${getLineColorClass(line)} truncate font-mono select-all`} title={line}>
-                                    <span className="text-slate-650 select-none mr-2 font-light text-[9px]">{String(idx+1).padStart(3, '0')}</span>
+                                    <span className="text-slate-600 select-none mr-2 font-light text-[9px]">{String(idx+1).padStart(3, '0')}</span>
                                     {line}
                                   </div>
                                 );
@@ -1497,7 +1670,7 @@ function App() {
                               className={`rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
                                 streamRightTab === 'metrics'
                                   ? theme === 'dark' ? 'bg-slate-800 text-lime-400' : 'bg-slate-200 text-slate-800'
-                                  : theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-850'
+                                  : theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'
                               }`}
                             >
                               ⚡ Metrics
@@ -1508,7 +1681,7 @@ function App() {
                               className={`rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
                                 streamRightTab === 'deep'
                                   ? theme === 'dark' ? 'bg-slate-800 text-lime-400' : 'bg-slate-200 text-slate-800'
-                                  : theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-850'
+                                  : theme === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'
                               }`}
                             >
                               🧠 Deep SRE Diagnostics
@@ -1528,10 +1701,10 @@ function App() {
                               <LogAnalysisCard result={tailResult} theme={theme} />
                             </div>
                           ) : (
-                            <div className={`rounded-3xl border h-[400px] flex flex-col items-center justify-center p-8 text-center transition bg-slate-950/40 border-slate-850/80`}>
+                            <div className={`rounded-3xl border h-[400px] flex flex-col items-center justify-center p-8 text-center transition bg-slate-950/40 border-slate-800/80`}>
                               <span className="text-3xl mb-3 animate-pulse">📊</span>
-                              <h4 className={`text-sm font-bold text-slate-350`}>Diagnostics Standby</h4>
-                              <p className="mt-2 text-xs text-slate-550 max-w-xs leading-relaxed">
+                              <h4 className={`text-sm font-bold text-slate-300`}>Diagnostics Standby</h4>
+                              <p className="mt-2 text-xs text-slate-500 max-w-xs leading-relaxed">
                                 {isTailing 
                                   ? 'Analyzing logs in real-time. Results will generate automatically as log patterns are detected.'
                                   : 'Start the tail streamer to view live aggregate statistics, application lifecycle boot details, and SRE error remediation cards.'}
@@ -1550,10 +1723,10 @@ function App() {
                               </div>
                             )
                           ) : (
-                            <div className={`rounded-3xl border h-[400px] flex flex-col items-center justify-center p-8 text-center transition bg-slate-950/40 border-slate-850/80`}>
+                            <div className={`rounded-3xl border h-[400px] flex flex-col items-center justify-center p-8 text-center transition bg-slate-950/40 border-slate-800/80`}>
                               <span className="text-3xl mb-3">🧠</span>
-                              <h4 className={`text-sm font-bold text-slate-350`}>Deep Diagnostics Ready</h4>
-                              <p className="mt-2 text-xs text-slate-550 max-w-xs leading-relaxed">
+                              <h4 className={`text-sm font-bold text-slate-300`}>Deep Diagnostics Ready</h4>
+                              <p className="mt-2 text-xs text-slate-500 max-w-xs leading-relaxed">
                                 Click the "🧠 Run Deep SRE Analysis" button to run complete comprehensive diagnostics on the full log file path with detailed aggregate metrics, pattern detections, and direct SRE remediation strategies.
                               </p>
                             </div>
@@ -1571,7 +1744,7 @@ function App() {
               <section className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-xl space-y-4 transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/35' : 'border-slate-200 bg-white'}`}>
                 <div>
                   <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>ServiceNow ITSM Gateway</h2>
-                  <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Query mock incidents directly from local offline database tables.</p>
+                  <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Query mock incidents directly from local offline database tables.</p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
@@ -1579,7 +1752,7 @@ function App() {
                     type="text"
                     value={ticketId}
                     onChange={(e) => setTicketId(e.target.value)}
-                    className={`rounded-full border px-5 py-2.5 text-xs outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950/80 text-slate-100 focus:border-lime-400/80' : 'border-slate-250 bg-slate-50 text-slate-800 focus:border-emerald-550'}`}
+                    className={`rounded-full border px-5 py-2.5 text-xs outline-none transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950/80 text-slate-100 focus:border-lime-400/80' : 'border-slate-300 bg-slate-50 text-slate-800 focus:border-emerald-550'}`}
                     placeholder="Enter incident ID (e.g. INC00101, INC00102)..."
                   />
                   <button
@@ -1593,7 +1766,7 @@ function App() {
 
 
                 {ticketResult && (
-                  <div className={`rounded-xl border p-4 text-xs font-medium transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-650'}`}>
+                  <div className={`rounded-xl border p-4 text-xs font-medium transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
                     ℹ️ {ticketResult}
                   </div>
                 )}
@@ -1601,7 +1774,7 @@ function App() {
                 {/* PREMIUM TICKET VISUALIZER CARD */}
                 {ticketDetails && (
                   <div className={`overflow-hidden rounded-2xl border shadow-lg transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
-                    <div className={`border-b p-4 flex items-center justify-between transition ${theme === 'dark' ? 'border-slate-850 bg-slate-900/40' : 'border-slate-100 bg-slate-50/50'}`}>
+                    <div className={`border-b p-4 flex items-center justify-between transition ${theme === 'dark' ? 'border-slate-800 bg-slate-900/40' : 'border-slate-100 bg-slate-50/50'}`}>
                       <div>
                         <span className={`text-[10px] font-bold uppercase ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>SYSINCIDENT LEDGER</span>
                         <h4 className={`text-md font-bold mt-0.5 ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>{ticketDetails.number}</h4>
@@ -1614,23 +1787,23 @@ function App() {
                     <div className="p-4 space-y-3.5 text-xs">
                       <div className="grid gap-2 grid-cols-2">
                         <div className={`p-2.5 rounded-xl border transition ${theme === 'dark' ? 'bg-slate-900/30 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                          <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-450'}`}>Severity Matrix</p>
+                          <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Severity Matrix</p>
                           <p className={`mt-1 font-semibold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>{ticketDetails.severity}</p>
                         </div>
                         <div className={`p-2.5 rounded-xl border transition ${theme === 'dark' ? 'bg-slate-900/30 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                          <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-450'}`}>SRE Owner</p>
+                          <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>SRE Owner</p>
                           <p className={`mt-1 font-semibold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>{ticketDetails.assigned_to || 'Unassigned'}</p>
                         </div>
                       </div>
 
                       <div className={`p-3 rounded-xl border transition ${theme === 'dark' ? 'bg-slate-900/30 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                        <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-450'}`}>Short Description</p>
-                        <p className={`mt-1 font-medium ${theme === 'dark' ? 'text-slate-100' : 'text-slate-850'}`}>{ticketDetails.short_description}</p>
+                        <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Short Description</p>
+                        <p className={`mt-1 font-medium ${theme === 'dark' ? 'text-slate-100' : 'text-slate-800'}`}>{ticketDetails.short_description}</p>
                       </div>
 
                       <div className={`p-3 rounded-xl border transition ${theme === 'dark' ? 'bg-slate-900/30 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
-                        <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-450'}`}>RCA Summary close notes</p>
-                        <p className={`mt-1 font-mono text-[11px] leading-4 italic ${theme === 'dark' ? 'text-slate-300' : 'text-slate-650'}`}>
+                        <p className={`text-[9px] uppercase tracking-wider font-bold ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>RCA Summary close notes</p>
+                        <p className={`mt-1 font-mono text-[11px] leading-4 italic ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
                           "{ticketDetails.close_notes || 'Ticket is actively being investigated. Resolution notes will populate upon closure.'}"
                         </p>
                       </div>
@@ -1644,7 +1817,7 @@ function App() {
             {activeSection === 'marketplace' && (
               <section className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/35' : 'border-slate-200 bg-white'}`}>
                 <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>Local Plugins Registry</h2>
-                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Hot-load or disable agents seamlessly without core system rebuilds.</p>
+                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Hot-load or disable agents seamlessly without core system rebuilds.</p>
                 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {availableAgents
@@ -1676,7 +1849,7 @@ function App() {
                           <button
                             type="button"
                             onClick={() => toggleAgent(ag.id, !!ag.enabled)}
-                            className={`mt-4 rounded-xl px-4 py-1.5 text-[10px] font-bold uppercase border transition w-full ${ag.enabled ? (theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-slate-200 border-slate-300 text-slate-650 hover:bg-slate-300') : (theme === 'dark' ? 'bg-lime-400 border-transparent text-slate-950 hover:bg-lime-300' : 'bg-emerald-500 border-transparent text-white hover:bg-emerald-600')}`}
+                            className={`mt-4 rounded-xl px-4 py-1.5 text-[10px] font-bold uppercase border transition w-full ${ag.enabled ? (theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-slate-200 border-slate-300 text-slate-600 hover:bg-slate-300') : (theme === 'dark' ? 'bg-lime-400 border-transparent text-slate-950 hover:bg-lime-300' : 'bg-emerald-500 border-transparent text-white hover:bg-emerald-600')}`}
                           >
                             {ag.enabled ? 'Enabled' : 'Deploy Plugin'}
                           </button>
@@ -1691,7 +1864,7 @@ function App() {
             {activeSection === 'settings' && (
               <section className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/35' : 'border-slate-200 bg-white'}`}>
                 <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>Local System Parameters</h2>
-                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Configure parameters, local folders settings, and model context thresholds.</p>
+                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Configure parameters, local folders settings, and model context thresholds.</p>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 text-xs">
                   <div className={`rounded-2xl border p-4 transition ${theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
                     <p className={`font-bold ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Local GGUF Model settings</p>
@@ -1719,7 +1892,7 @@ function App() {
             {activeSection === 'admin' && (
               <section className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-xl transition-all duration-300 ${theme === 'dark' ? 'border-slate-800/80 bg-slate-900/35' : 'border-slate-200 bg-white'}`}>
                 <h2 className={`text-xl font-black ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>System Governance Panel</h2>
-                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-550'}`}>Check agents health, monitor active processes, and scan compliance logs.</p>
+                <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Check agents health, monitor active processes, and scan compliance logs.</p>
                 
                 <div className="mt-4 space-y-3 text-xs">
                   <div className="grid gap-3 grid-cols-3">

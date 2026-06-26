@@ -90,6 +90,7 @@ frontend/dist/
 
 # Agents
 agents/*/__pycache__/
+**/.schema_cache/
 
 # Docker / compose
 docker-compose.override.yml

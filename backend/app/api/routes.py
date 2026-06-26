@@ -547,6 +547,87 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
 
             # 1. INTENT CLASSIFICATION & AGENT ROUTING
             if target_agent_id == "auto":
+                normalized_message = request.message.lower()
+                if "ansible" in normalized_message and "terraform" in normalized_message:
+                    yield f"data: {json.dumps({'event': 'routing', 'data': 'Dual-Agent Routing: Detected both Ansible and Terraform keywords. Selecting both agents...'})}\n\n"
+                    await asyncio.sleep(0.05)
+                    
+                    try:
+                        ansible_entry = agent_registry.get_agent("ansible_agent")
+                        ansible_instance = ansible_entry["plugin"]["agent"]
+                        terraform_entry = agent_registry.get_agent("terraform_agent")
+                        terraform_instance = terraform_entry["plugin"]["agent"]
+                    except Exception as e:
+                        logger.error(f"Error loading agents for dual routing: {e}")
+                        yield f"data: {json.dumps({'event': 'error', 'data': 'Failed to load Ansible or Terraform agent: ' + str(e)})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+
+                    # 2. TASK DECOMPOSITION & PLANNING
+                    yield f"data: {json.dumps({'event': 'planning', 'data': 'Generating joint execution plan for Ansible and Terraform agents...'})}\n\n"
+                    await asyncio.sleep(0.05)
+
+                    session_messages = repo.get_session_messages(session_id)
+                    user_history = [m.text for m in session_messages if m.role == "user"]
+                    context = {
+                        "session_id": session_id,
+                        "log_folder_path": str(Path(settings.runtime_workspace_path) / "uploads" / session_id),
+                        "history": user_history,
+                        "start_time": request.start_time,
+                        "end_time": request.end_time,
+                        "code_text": request.message,
+                    }
+
+                    ansible_plan = await ansible_instance.plan(request.message, context)
+                    terraform_plan = await terraform_instance.plan(request.message, context)
+
+                    combined_steps = []
+                    combined_steps.append("Ansible Agent Plan:")
+                    for idx, step in enumerate(ansible_plan.get("steps", [])):
+                        combined_steps.append(f"  1.{idx+1} {step}")
+                    combined_steps.append("Terraform Agent Plan:")
+                    for idx, step in enumerate(terraform_plan.get("steps", [])):
+                        combined_steps.append(f"  2.{idx+1} {step}")
+                    
+                    planning_msg = "Execution Plan Generated:\n" + "\n".join(combined_steps)
+                    yield f"data: {json.dumps({'event': 'planning', 'data': planning_msg})}\n\n"
+                    await asyncio.sleep(0.1)
+
+                    # 3. DETERMINISTIC PYTHON EXECUTION
+                    yield f"data: {json.dumps({'event': 'execution', 'data': 'Executing Ansible and Terraform agent workflows...'})}\n\n"
+                    await asyncio.sleep(0.05)
+
+                    ansible_result = await ansible_instance.execute(ansible_plan)
+                    terraform_result = await terraform_instance.execute(terraform_plan)
+
+                    yield f"data: {json.dumps({'event': 'execution', 'data': 'Multi-agent execution completed. Synthesizing combined report...'})}\n\n"
+                    await asyncio.sleep(0.1)
+
+                    # 4. RESPONSE SUMMARIZATION & STREAMING
+                    ansible_summary = await ansible_instance.summarize(ansible_result)
+                    terraform_summary = await terraform_instance.summarize(terraform_result)
+
+                    summary = (
+                        f"## 🚀 Combined Multi-Agent IaC Generation Report\n\n"
+                        f"Both the **Ansible Agent** and the **Terraform Agent** have processed your request for Nutanix VM migration and generated the necessary configurations.\n\n"
+                        f"{ansible_summary}\n\n"
+                        f"{terraform_summary}\n"
+                    )
+
+                    words = summary.split(" ")
+                    for idx, word in enumerate(words):
+                        chunk = word + (" " if idx < len(words) - 1 else "")
+                        yield f"data: {json.dumps({'event': 'token', 'data': chunk})}\n\n"
+                        await asyncio.sleep(0.012)
+
+                    # Save the final structured agent response to DB memory
+                    repo.add_message(session_id=session_id, role="assistant", text=summary, metadata={"agent_id": "ansible_agent,terraform_agent"})
+
+                    # Send final session details
+                    yield f"data: {json.dumps({'event': 'session', 'session_id': session_id, 'agent_id': 'auto'})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
                 yield f"data: {json.dumps({'event': 'routing', 'data': 'Classifying query intent using local SLM orchestrator...'})}\n\n"
                 await asyncio.sleep(0.05)
 

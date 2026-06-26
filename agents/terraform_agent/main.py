@@ -7,7 +7,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from app.services.plugin_manager import IAgent
-from tools import TerraformAuditor
+from tools import TerraformAuditor, GENERIC_RESOURCE_TYPES
 
 if TYPE_CHECKING:
     from app.core.slm.service import SLMService
@@ -161,6 +161,7 @@ class TerraformAgent(IAgent):
                     "parameters": params,
                     "validation": validation,
                     "generator": "deterministic_template",
+                    "query": query,
                 }
             }
         elif action == "validate":
@@ -174,6 +175,7 @@ class TerraformAgent(IAgent):
                     "validation": validation,
                     "audit": audit_results,
                     "uploaded_files": ctx.get("uploaded_files", []),
+                    "query": query,
                 }
             }
         else:
@@ -182,7 +184,8 @@ class TerraformAgent(IAgent):
                 "status": "success",
                 "result": {
                     "action": "audit",
-                    "audit": audit_results
+                    "audit": audit_results,
+                    "query": query,
                 }
             }
 
@@ -193,6 +196,7 @@ class TerraformAgent(IAgent):
 
         data = result.get("result", {})
         action = data.get("action", "audit")
+        query = data.get("query", "")
 
         if action == "generate":
             code = data.get("code", "")
@@ -208,6 +212,47 @@ class TerraformAgent(IAgent):
             elif resource_str == "Instance":
                 resource_str = "Compute Instance"
 
+            features = []
+            if "tags =" in code or "tags" in code:
+                env_val = params.get("environment") or "Production"
+                owner_val = params.get("owner") or "Platform_Ops"
+                features.append(f"**Mandatory tagging**: Pre-assigned standard company tags (e.g. `Environment = \"{env_val.capitalize()}\"`, `Owner = \"{owner_val}\"`).")
+                
+            if provider_str == "Azure":
+                if "storage" in str(resource_type).lower():
+                    features.append("**Secure Storage Defaults**: Configured with strict network rules (`public_network_access_enabled = false`), versioning, and minimal TLS version 1.2.")
+                if "webapp" in str(resource_type).lower():
+                    features.append("**HTTPS/TLS Enforcement**: Explicitly enabled `https_only = true` and disabled unencrypted FTP deployments (`ftps_state = \"Disabled\"`).")
+                if "hub" in query.lower() and "spoke" in query.lower():
+                    features.append("**Network Topology Security**: Peerings between Hub and Spoke virtual networks are bidirectionally configured to ensure secure routing boundaries.")
+            elif provider_str == "AWS":
+                if resource_type == "instance":
+                    features.append("**EBS Volume Encryption**: Configured compute instance storage with `encrypted = true` under root block devices.")
+                if resource_type == "vpc":
+                    features.append("**DNS & Telemetry Logging**: DNS support is enabled alongside AWS VPC Flow Logs routed to CloudWatch Logs for auditability.")
+            elif provider_str == "NUTANIX":
+                if resource_type == "instance":
+                    features.append("**Hyperconverged VM Metrics**: Defined virtual machine socket count, memory footprint, and network bridges mapped to designated subnets.")
+            elif provider_str == "VSPHERE":
+                if resource_type == "instance":
+                    features.append("**Datastore and Pool Allocations**: Managed guest virtualization profiles mapped to corporate resource pools and thin-provisioned datastores.")
+            elif provider_str == "KUBERNETES":
+                features.append("**Declarative Namespace**: Scaffolds isolated administrative Kubernetes namespaces for workload isolation.")
+            elif provider_str == "VAULT":
+                features.append("**Secret Encryption**: Defined secure key-value secret configurations on HashiCorp Vault storage engine.")
+            elif provider_str == "RANDOM":
+                features.append("**Cryptographic Generation**: Scaffolds cryptographically secure random password resource blocks.")
+            elif provider_str == "LOCAL":
+                features.append("**Declarative File Output**: Scaffolds secure local file configurations with strict permissions.")
+                
+            if not features:
+                features.append("**Standards-Compliant Blueprint**: Standard resource configuration conforming to base corporate architecture guidelines.")
+                
+            status_text = "Compliant" if validation.get('status') == 'pass' else "Violations Detected"
+            features.append(f"**Static Guardrails Scan**: Verified against company standards policy engine (Status: `{status_text}`).")
+            
+            features_md = "\n".join(f"- {f}" for f in features)
+
             summary = (
                 f"### 🛠️ {provider_str} {resource_str} Terraform HCL Generator\n\n"
                 f"I have generated compliant, highly secure Terraform HCL resources containing mandatory tags and encrypted storage guardrails:\n\n"
@@ -215,9 +260,7 @@ class TerraformAgent(IAgent):
                 f"{code}"
                 f"```\n\n"
                 f"#### Compliant Features Included:\n"
-                f"- **Mandatory tagging** details: `'Environment'` and `'Owner'` values are pre-assigned.\n"
-                f"- **Security default state**: Root storage blocks have `encrypted = true` enabled where compute storage is generated.\n"
-                f"- **Guardrail validation**: `{validation.get('status', 'unknown')}` with `{validation.get('finding_count', 0)}` finding(s)."
+                f"{features_md}"
             )
             return summary
         elif action == "validate":
@@ -276,53 +319,104 @@ class TerraformAgent(IAgent):
         params: dict[str, str] = {}
         normalized = query.lower()
 
-        if "azure" in normalized or "azurerm" in normalized:
-            params["provider"] = "azurerm"
-        elif "aws" in normalized or "ec2" in normalized or "vpc" in normalized:
-            params["provider"] = "aws"
-        elif "google" in normalized or "gcp" in normalized or "google_" in normalized:
-            params["provider"] = "google"
-        elif "kubernetes" in normalized or "k8s" in normalized or "kubernetes_" in normalized:
-            params["provider"] = "kubernetes"
-        elif "helm" in normalized:
-            params["provider"] = "helm"
-        elif "vault" in normalized or "vault_" in normalized:
-            params["provider"] = "vault"
-        elif "random_" in normalized or "random provider" in normalized:
-            params["provider"] = "random"
-        elif "local_" in normalized or "local provider" in normalized:
-            params["provider"] = "local"
-        elif "null_" in normalized or "null provider" in normalized:
-            params["provider"] = "null"
+        # Check if query contains an explicit resource that is mapped to a generic type (e.g. google_sql_database_instance)
+        found_generic = False
+        for (prov, rtype), resource_name in GENERIC_RESOURCE_TYPES.items():
+            if re.search(rf"\b{resource_name}\b", normalized):
+                params["provider"] = prov
+                params["resource_type"] = rtype
+                found_generic = True
+                break
 
-        wants_storage = any(term in normalized for term in ["bucket", "s3", "storage", "storage account"])
-        wants_webapp = any(term in normalized for term in ["webapp", "web app", "app service"])
-        if wants_storage and wants_webapp:
-            params["resource_type"] = "storage_webapp"
-        elif wants_storage:
-            params["resource_type"] = "storage"
-        elif wants_webapp:
-            params["resource_type"] = "webapp"
-        elif any(term in normalized for term in ["database", "db", "postgres", "postgresql", "rds", "sql"]):
-            params["resource_type"] = "database"
-        elif any(term in normalized for term in ["vpc", "vnet", "network", "subnet", "resource group"]):
-            params["resource_type"] = "vpc"
-        elif any(term in normalized for term in ["ec2", "instance", "server", "vm", "virtual machine"]):
-            params["resource_type"] = "instance"
-        elif any(term in normalized for term in ["firewall", "network security group", "nsg", "security group"]):
-            params["resource_type"] = "security_group"
-        elif "deployment" in normalized:
-            params["resource_type"] = "deployment"
-        elif "namespace" in normalized:
-            params["resource_type"] = "namespace"
-        elif "helm release" in normalized or "chart" in normalized:
-            params["resource_type"] = "release"
-        elif "secret" in normalized:
-            params["resource_type"] = "secret"
-        else:
-            explicit_resource = re.search(r"\b[a-z][a-z0-9]*_([a-z0-9_]+)\b", normalized)
-            if explicit_resource:
-                params["resource_type"] = explicit_resource.group(1).strip("_")
+        has_explicit = found_generic
+        if not has_explicit:
+            # Check for explicit provider resource first (e.g. azurerm_storage_sync, aws_s3_bucket)
+            prefixed_resource = re.search(r"\b([a-z][a-z0-9]*)_([a-z0-9_]+)\b", normalized)
+            if prefixed_resource:
+                prefix = prefixed_resource.group(1)
+                known_providers = {
+                    "aws", "amazon", "azure", "azurerm", "google", "gcp", "kubernetes", "k8s",
+                    "helm", "vault", "random", "local", "null", "nutanix", "vsphere", "vmware",
+                    "activedirectory", "ad", "appd", "archive", "awslambda", "awsx", "azure-preview", 
+                    "azuread", "azurecaf", "azurestack", "bless", "brightbox", "circleci", "circonus", 
+                    "cloudflare", "cloudinit", "confluentcloud", "consul", "ct", "digitalocean", 
+                    "dmsnitch", "dns", "ecloud", "eksctl", "elasticsearch", "exoscale", "external", 
+                    "fastly", "fortios", "freeipa", "git", "google-beta", "graylog", "gsuite", 
+                    "hcloud", "hdns", "helmfile", "heroku", "http", "idm", "infoblox", "javascript", 
+                    "jetstream", "jsonnet", "kafka", "kafka-connect", "kubectl", "launchdarkly", 
+                    "linode", "matchbox", "msgraph", "ncloud", "netapp-gcp", "newrelic", "njalla", 
+                    "nomad", "onelogin", "openshift", "opsgenie", "orion", "outlook", "pass", 
+                    "petstore", "pingaccess", "pingfederate", "pnap", "postgresql", "puppetca", 
+                    "puppetdb", "pypi", "rancher2", "rke", "rollbar", "safedns", "sakuracloud", 
+                    "scaffolding", "sdm", "sentry", "shell", "signalfx", "sops", "stackpath", 
+                    "statuspage", "sumologic", "teamcity", "template", "tencentcloud", "testing", 
+                    "tfe", "time", "tls", "transip", "transloadit", "triton", "turbot", "ucloud", 
+                    "unifi", "vaultutility", "vinyldns", "vmworkstation", "vultr", "windns"
+                }
+                if prefix in known_providers:
+                    provider_map = {
+                        "amazon": "aws",
+                        "azure": "azurerm",
+                        "gcp": "google",
+                        "k8s": "kubernetes",
+                        "vmware": "vsphere"
+                    }
+                    params["provider"] = provider_map.get(prefix, prefix)
+                    params["resource_type"] = prefixed_resource.group(2).strip("_")
+                    has_explicit = True
+
+        if not has_explicit:
+            if "azure" in normalized or "azurerm" in normalized:
+                params["provider"] = "azurerm"
+            elif "aws" in normalized or "ec2" in normalized or "vpc" in normalized:
+                params["provider"] = "aws"
+            elif "google" in normalized or "gcp" in normalized or "google_" in normalized:
+                params["provider"] = "google"
+            elif "kubernetes" in normalized or "k8s" in normalized or "kubernetes_" in normalized:
+                params["provider"] = "kubernetes"
+            elif "helm" in normalized:
+                params["provider"] = "helm"
+            elif "vault" in normalized or "vault_" in normalized:
+                params["provider"] = "vault"
+            elif "random_" in normalized or "random provider" in normalized:
+                params["provider"] = "random"
+            elif "local_" in normalized or "local provider" in normalized:
+                params["provider"] = "local"
+            elif "null_" in normalized or "null provider" in normalized:
+                params["provider"] = "null"
+            elif "nutanix" in normalized:
+                params["provider"] = "nutanix"
+            elif "vmware" in normalized or "vsphere" in normalized or "vcenter" in normalized:
+                params["provider"] = "vsphere"
+
+            wants_storage = any(term in normalized for term in ["bucket", "s3", "storage", "storage account"])
+            wants_webapp = any(term in normalized for term in ["webapp", "web app", "app service"])
+            if wants_storage and wants_webapp:
+                params["resource_type"] = "storage_webapp"
+            elif wants_storage:
+                params["resource_type"] = "storage"
+            elif wants_webapp:
+                params["resource_type"] = "webapp"
+            elif any(term in normalized for term in ["database", "db", "postgres", "postgresql", "rds", "sql"]):
+                params["resource_type"] = "database"
+            elif any(term in normalized for term in ["vpc", "vnet", "network", "subnet", "resource group"]):
+                params["resource_type"] = "vpc"
+            elif any(term in normalized for term in ["ec2", "instance", "server", "vm", "virtual machine"]):
+                params["resource_type"] = "instance"
+            elif any(term in normalized for term in ["firewall", "network security group", "nsg", "security group"]):
+                params["resource_type"] = "security_group"
+            elif "deployment" in normalized:
+                params["resource_type"] = "deployment"
+            elif "namespace" in normalized:
+                params["resource_type"] = "namespace"
+            elif "helm release" in normalized or "chart" in normalized:
+                params["resource_type"] = "release"
+            elif "secret" in normalized:
+                params["resource_type"] = "secret"
+            else:
+                explicit_resource = re.search(r"\b[a-z][a-z0-9]*_([a-z0-9_]+)\b", normalized)
+                if explicit_resource:
+                    params["resource_type"] = explicit_resource.group(1).strip("_")
 
         cidr_match = re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}\b", query)
         if cidr_match:

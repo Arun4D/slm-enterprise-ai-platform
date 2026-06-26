@@ -139,6 +139,24 @@ class AnsibleAgent(IAgent):
             if srv_match and srv_match.group(1) not in ["playbook", "ansible"]:
                 params["service_name"] = srv_match.group(1)
 
+            # Fallback regex provider name extraction
+            if "azure" in normalized:
+                params["provider"] = "azure"
+            elif "nutanix" in normalized:
+                params["provider"] = "nutanix"
+            elif "vmware" in normalized or "vcenter" in normalized:
+                params["provider"] = "vmware"
+            elif "servicenow" in normalized or "snow" in normalized:
+                params["provider"] = "servicenow"
+
+            # Fallback VM name / target host extraction
+            vm_match = re.search(r'(?:vm|virtual machine)\s+([a-zA-Z0-9_-]+)', normalized)
+            if vm_match:
+                params["vm_name"] = vm_match.group(1)
+            target_match = re.search(r'(?:to|target|destination)\s+([a-zA-Z0-9_-]+)', normalized)
+            if target_match:
+                params["target_host"] = target_match.group(1)
+
             # 2. SLM-based extraction (if available)
             if self._slm_service is not None and self._slm_service.available:
                 system_prompt = (
@@ -232,29 +250,14 @@ class AnsibleAgent(IAgent):
 
         data = result.get("result", {})
         action = data.get("action", "audit")
-        pings = data.get("pings", [])
-        
-        failed_host = next((p["host"] for p in pings if p["ping_status"] != "Success"), None)
 
         if action == "generate":
             code = data.get("code", "")
             playbook_name = data.get("playbook_name", "site.yml")
             generation = data.get("generation", {})
             
-            ping_rows = []
-            for p in pings:
-                status_badge = "✅ Success" if p["ping_status"] == "Success" else "❌ Failed"
-                ping_rows.append(f"| {p['host']} | {p['ip']} | {status_badge} | {p['latency_ms']} ms |")
-
-            connection_warning = ""
-            if failed_host:
-                connection_warning = f"- **Connection Issue (`{failed_host}`)**: Synthetic inventory signal shows {failed_host} failed to respond. Verify SSH/network gateway configuration only if this playbook targets remote hosts."
-
             title = generation.get('title', 'Generated Ansible Playbook')
-            ping_table = "\n".join(ping_rows)
-            remediation_details = f"- {generation.get('remediation', 'Generated tasks use declarative modules for idempotency.')}"
-            if connection_warning:
-                remediation_details += f"\n{connection_warning}"
+            remediation_details = generation.get('remediation', 'Generated tasks use declarative modules for idempotency.')
 
             summary = (
                 f"### ⚡ {title} Generator & Validator\n\n"
@@ -270,12 +273,8 @@ class AnsibleAgent(IAgent):
                 f"| **Playbook Lint Warnings** | `None (0 warnings detected, 100% compliant)` |\n\n"
                 f"#### Execution Prerequisites\n"
                 f"- {generation.get('verification_note', 'Review inventory, variables, and credentials before execution.')}\n\n"
-                f"#### 👥 Inventory Hosts Connectivity Ping Report:\n"
-                f"| Hostname | Node IP | Status | Latency |\n"
-                f"| :--- | :--- | :--- | :--- |\n"
-                f"{ping_table}\n\n"
                 f"#### 🔧 Remediation Plan Details:\n"
-                f"{remediation_details}"
+                f"> {remediation_details}"
             )
             return summary
         elif action == "validate":
@@ -286,29 +285,16 @@ class AnsibleAgent(IAgent):
                 f"- **{item.get('severity', 'info').upper()}** `{item.get('rule')}`: {item.get('message')} Remediation: {item.get('remediation')}"
                 for item in findings
             ) or "- No Ansible playbook guardrail violations detected."
-            ping_rows = "\n".join(
-                f"| {p['host']} | {p['ip']} | {p['ping_status']} | {p['latency_ms']} ms |"
-                for p in pings
-            )
             file_note = ", ".join(files) if files else "pasted chat text"
             return (
                 "### 🛡️ Ansible Playbook Validation\n\n"
                 f"**Input source**: {file_note}\n\n"
                 f"**Status**: `{validation.get('status')}` with `{validation.get('finding_count', 0)}` finding(s)\n\n"
                 "#### Guardrail Findings\n"
-                f"{findings_md}\n\n"
-                "#### 👥 Inventory Hosts Connectivity Ping Report:\n"
-                "| Hostname | Node IP | Status | Latency |\n"
-                "| :--- | :--- | :--- | :--- |\n"
-                f"{ping_rows}"
+                f"{findings_md}"
             )
         else:
             playbook = data.get("playbook", {})
-
-            ping_rows = []
-            for p in pings:
-                status_badge = "✅ Success" if p["ping_status"] == "Success" else "❌ Failed"
-                ping_rows.append(f"| {p['host']} | {p['ip']} | {status_badge} | {p['latency_ms']} ms |")
 
             warnings_md = ""
             warnings = playbook.get("warnings", [])
@@ -317,23 +303,15 @@ class AnsibleAgent(IAgent):
             else:
                 warnings_md = "- 🌟 Playbook tasks confirm to target criteria."
 
-            remediation_recommendation = ""
-            if failed_host:
-                remediation_recommendation = f"*Remediation recommendation: SRE {failed_host} failed to respond. Verify SSH network keys and security gateway rules.*"
-            else:
-                remediation_recommendation = "*Remediation recommendation: All target hosts are reachable. Ready for playbook execution.*"
+            remediation_recommendation = "Review playbook tasks and variables before executing against your target inventory."
 
             playbook_name = playbook.get('playbook_name', 'site.yml')
-            ping_table = "\n".join(ping_rows)
             summary = (
                 f"### ⚡ {playbook_name} Playbook Dry-Run & Inventory Status\n\n"
                 f"**Playbook**: `{playbook_name}` | **Syntax Compliance**: `Valid`\n\n"
                 f"#### Playbook Lint Warnings:\n"
                 f"{warnings_md}\n\n"
-                f"#### 👥 Inventory Hosts Connectivity Ping Report:\n"
-                f"| Hostname | Node IP | Status | Latency |\n"
-                f"| :--- | :--- | :--- | :--- |\n"
-                f"{ping_table}\n\n"
-                f"{remediation_recommendation}"
+                f"#### 🔧 Remediation Plan Details:\n"
+                f"> {remediation_recommendation}"
             )
             return summary
